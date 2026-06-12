@@ -12,7 +12,8 @@ modèles WhisperX/pyannote).
 
 | Fichier | Rôle |
 |---------|------|
-| `transcribe.py` | Transcription → produit `.txt`, `.srt`, `.json` |
+| `transcribe.py` | Transcription simple → `.txt`, `.srt`, `.json` (audios courts) |
+| `transcribe_robuste.py` | Transcription d'audios **longs** : tronçons + reprise sur interruption |
 | `tagger.html`   | Lecteur audio + transcription synchronisée + tagging des locuteurs |
 
 ---
@@ -98,6 +99,18 @@ tagueur **pré-affecte** les locuteurs à l'import :
 
 Tu n'as alors qu'à **vérifier et corriger** le pré-remplissage.
 
+### Mode réconciliation (SRT diarisé par tronçon)
+Si le `.srt` provient de `transcribe_robuste.py --diarize`, il contient des
+étiquettes **locales par tronçon** (`T1-A`, `T2-B`…). À l'import, le tagueur
+ouvre automatiquement un **panneau de réconciliation** :
+- chaque locuteur local est listé avec un bouton **▶ écouter** (joue ~4 s de
+  son premier passage) et un extrait de texte ;
+- tu cliques le locuteur global correspondant (Loc 1, Loc 2…) ;
+- « Appliquer » propage le mapping sur tous les segments.
+
+Le bouton **Réconcilier** (en bas) rouvre ce panneau à tout moment. Après
+application, tu peux corriger les segments isolés avec le tagging habituel.
+
 ### Deux modes de tagging
 - **Par segment** : sélectionner un segment, cliquer Loc 1 / Loc 2 (ou touche
   `1` / `2`). Affecte uniquement ce segment. Utile pour les exceptions
@@ -130,6 +143,57 @@ locuteur actif (ex. « Intervieweur », « Candidat ») ; ces noms apparaissent 
 les exports.
 
 ---
+
+## 3. Transcription robuste pour audios longs (`transcribe_robuste.py`)
+
+Pour un entretien de plusieurs heures, une transcription d'un seul tenant est
+**fragile** : une veille, une fermeture de fenêtre ou une coupure et tout est
+perdu (WhisperX n'a pas de reprise native). Ce script découpe le travail en
+tronçons sauvegardés au fur et à mesure.
+
+### Fonctionnement
+1. Découpe l'audio en tronçons (défaut 15 min) avec un léger chevauchement.
+2. Transcrit chaque tronçon ; **le résultat est écrit sur disque dès qu'un
+   tronçon est fini** (point de reprise).
+3. **Reprise** : relancer la même commande saute les tronçons déjà faits et
+   reprend où ça s'était arrêté.
+4. **Fusion** : recolle les tronçons en réajustant les timestamps et en
+   éliminant les doublons de chevauchement → `.txt` / `.srt` / `.json` finaux.
+
+### Utilisation
+```powershell
+python skills\transcription\transcribe_robuste.py "data\entretien_1h30.m4a"
+```
+
+Options : `--chunk-min` (défaut 15), `--overlap-sec` (défaut 2),
+`--model`, `--language`, `--work-dir`, `--output-dir`.
+
+En cas d'interruption, **relancer exactement la même commande** : la reprise
+est automatique.
+
+### Diarisation par tronçon (option `--diarize`)
+Par défaut, ce script ne diarise pas (sortie `.srt` sans locuteur → tagging
+manuel). Avec `--diarize`, chaque tronçon est diarisé **indépendamment** et ses
+locuteurs sont nommés **localement** : `T1-A`, `T1-B` (tronçon 1), `T2-A`,
+`T2-B` (tronçon 2)…
+
+Pourquoi local : pyannote n'attribue pas les mêmes étiquettes d'un tronçon à
+l'autre (`SPEAKER_00` du tronçon 1 ≠ tronçon 2). Plutôt que de deviner la
+correspondance automatiquement (fragile), le tagueur propose un **mode
+réconciliation** : tu écoutes un extrait de chaque locuteur local et tu
+l'associes à un locuteur global. Quelques clics règlent toute la « couture ».
+
+```powershell
+python skills\transcription\transcribe_robuste.py "data\entretien.m4a" --diarize
+```
+
+> `--diarize` requiert le token HF (config/.env) et porte le chevauchement à 5s
+> pour fiabiliser la réconciliation. La diarisation reste imparfaite sur voix
+> proches : c'est un pré-remplissage à vérifier, pas une vérité.
+
+### Dossier de travail
+Les tronçons sont conservés dans `data/.chunks/<nom>/` (gitignoré). Une fois la
+transcription finale vérifiée, ce dossier est supprimable.
 
 ## Note sur la performance (CPU sans GPU NVIDIA)
 - Transcription : ~1,1× la durée de l'audio (rapide).

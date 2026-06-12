@@ -120,6 +120,37 @@
   .help-panel h3 { margin: 0 0 8px; font-size: 12px; color: var(--ink); }
   .help-panel dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
   .help-panel dt { color: var(--ink); font-family: ui-monospace, monospace; }
+
+  /* ---- Panneau de reconciliation ---- */
+  .recon-overlay {
+    display: none; position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.6); align-items: center; justify-content: center;
+  }
+  .recon-overlay.open { display: flex; }
+  .recon-modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    width: min(720px, 92vw); max-height: 85vh; display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .recon-head { padding: 18px 22px 12px; border-bottom: 1px solid var(--line); }
+  .recon-head h2 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
+  .recon-head p { margin: 0 0 8px; font-size: 13px; color: var(--ink-dim); line-height: 1.45; }
+  .recon-progress { font-size: 12px; color: var(--playing-edge); font-variant-numeric: tabular-nums; }
+  .recon-list { padding: 10px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .rec-row {
+    display: grid; grid-template-columns: 70px auto 1fr; gap: 10px 14px; align-items: center;
+    padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .rec-id { font-family: ui-monospace, monospace; font-size: 13px; color: var(--ink); font-weight: 600; }
+  .rec-listen { padding: 6px 10px; font-size: 12px; }
+  .rec-sample { font-size: 12px; color: var(--ink-dim); font-style: italic; grid-column: 3; }
+  .rec-choices { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
+  .rec-choice { padding: 6px 12px; font-size: 12px; }
+  .rec-choice.chosen { background: var(--playing); border-color: var(--playing-edge); }
+  .recon-foot {
+    padding: 14px 22px; border-top: 1px solid var(--line);
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
 </style>
 </head>
 <body>
@@ -181,6 +212,7 @@
   <div class="legend" id="legend"></div>
   <div class="footer-actions">
     <span class="help-toggle" id="helpToggle">Raccourcis ?</span>
+    <button class="btn btn-ghost" id="reconcileReopen">Réconcilier</button>
     <button class="btn btn-ghost" id="renameBtns"></button>
     <button class="btn" id="exportTxt">Exporter .txt</button>
     <button class="btn" id="exportSrt">Exporter .srt</button>
@@ -498,6 +530,12 @@
     const f = e.target.files[0]; if (!f) return;
     player.src = URL.createObjectURL(f);
   });
+  // Detecte si les etiquettes sont LOCALES par troncon (format T{n}-{lettre})
+  function areLocalLabels(labels) {
+    if (labels.length === 0) return false;
+    return labels.every(l => /^T\d+-/.test(l));
+  }
+
   document.getElementById("srtFile").addEventListener("change", (e) => {
     const f = e.target.files[0]; if (!f) return;
     const reader = new FileReader();
@@ -506,30 +544,32 @@
       segments = parsed.segments;
       const labels = parsed.labels;
 
-      // Pre-remplissage depuis la diarisation : mapping label -> locuteur (ordre d'apparition)
+      if (labels.length > 0 && areLocalLabels(labels)) {
+        // Etiquettes locales par troncon -> mode reconciliation manuel
+        selected = segments.length ? 0 : -1;
+        lastPlaying = -1;
+        render();
+        if (selected >= 0) select(0, false);
+        openReconcile(labels);
+        return;
+      }
+
+      // Pre-remplissage direct depuis une diarisation simple (SPEAKER_xx, etc.)
       if (labels.length > 0) {
         const usable = Math.min(labels.length, MAX);
-        // Ajuster le selecteur au nombre de locuteurs detectes (plafonne a MAX, plancher a 2)
         const targetN = Math.max(2, usable);
         nSpeakers = targetN;
         document.getElementById("speakerCount").value = String(targetN);
-
-        // Construire la table label -> index (les labels au-dela de MAX restent non affectes)
         const map = {};
         labels.forEach((lab, idx) => { if (idx < MAX) map[lab] = idx; });
-
-        let dropped = 0;
-        let prevSpeaker = null;
+        let dropped = 0, prevSpeaker = null;
         for (const seg of segments) {
           if (seg.label && map[seg.label] !== undefined) {
             seg.speaker = map[seg.label];
-            // Marquer un debut de prise de parole a chaque changement de locuteur
             seg.turnStart = (seg.speaker !== prevSpeaker);
             prevSpeaker = seg.speaker;
           } else {
-            seg.speaker = null;
-            seg.turnStart = false;
-            prevSpeaker = null;
+            seg.speaker = null; seg.turnStart = false; prevSpeaker = null;
             if (seg.label) dropped++;
           }
         }
@@ -596,9 +636,131 @@
     document.getElementById("helpPanel").classList.toggle("open");
   });
 
+  // ===================== MODE RECONCILIATION =====================
+  // Quand le SRT porte des etiquettes locales par troncon (T1-A, T2-B...),
+  // on mappe chaque locuteur local vers un locuteur global (Loc 1..N).
+  let reconcileMap = {};   // { "T1-A": 0, "T2-A": 1, ... }  (global index ou undefined)
+
+  function firstSegmentForLabel(label) {
+    return segments.find(s => s.label === label) || null;
+  }
+
+  function openReconcile(localLabels) {
+    reconcileMap = {};
+    const panel = document.getElementById("reconcilePanel");
+    const list = document.getElementById("reconcileList");
+    list.innerHTML = "";
+
+    localLabels.forEach(label => {
+      const seg = firstSegmentForLabel(label);
+      const row = document.createElement("div");
+      row.className = "rec-row";
+      row.dataset.label = label;
+
+      const id = document.createElement("div");
+      id.className = "rec-id";
+      id.textContent = label;
+
+      const listen = document.createElement("button");
+      listen.className = "btn rec-listen";
+      listen.innerHTML = "▶ écouter";
+      listen.addEventListener("click", () => {
+        if (!seg) return;
+        player.currentTime = seg.start;
+        player.play();
+        // stopper apres ~4s pour ne jouer qu'un extrait
+        clearTimeout(listen._t);
+        listen._t = setTimeout(() => player.pause(), 4000);
+      });
+
+      const sample = document.createElement("div");
+      sample.className = "rec-sample";
+      sample.textContent = seg ? `« ${seg.text.slice(0, 60)}${seg.text.length > 60 ? "…" : ""} »` : "(pas d'extrait)";
+
+      const choices = document.createElement("div");
+      choices.className = "rec-choices";
+      for (let g = 0; g < nSpeakers; g++) {
+        const b = document.createElement("button");
+        b.className = "btn rec-choice";
+        b.style.borderColor = locVar(g);
+        b.innerHTML = `<span class="dot" style="background:${locVar(g)}"></span>${names[g]}`;
+        b.addEventListener("click", () => {
+          reconcileMap[label] = g;
+          row.querySelectorAll(".rec-choice").forEach(x => x.classList.remove("chosen"));
+          b.classList.add("chosen");
+          updateReconcileProgress(localLabels);
+        });
+        choices.appendChild(b);
+      }
+
+      row.appendChild(id);
+      row.appendChild(listen);
+      row.appendChild(sample);
+      row.appendChild(choices);
+      list.appendChild(row);
+    });
+
+    // Le selecteur de nombre de locuteurs reste actif pendant la reconciliation :
+    // si on le change, on reconstruit les boutons de choix.
+    updateReconcileProgress(localLabels);
+    panel.classList.add("open");
+  }
+
+  function updateReconcileProgress(localLabels) {
+    const done = localLabels.filter(l => reconcileMap[l] !== undefined).length;
+    const prog = document.getElementById("reconcileProgress");
+    if (prog) prog.textContent = `${done} / ${localLabels.length} locuteurs locaux assignés`;
+  }
+
+  function applyReconcile() {
+    let prev = null;
+    for (const seg of segments) {
+      const g = seg.label ? reconcileMap[seg.label] : undefined;
+      if (g !== undefined) {
+        seg.speaker = g;
+        seg.turnStart = (g !== prev);
+        prev = g;
+      } else {
+        seg.speaker = null;
+        seg.turnStart = false;
+        prev = null;
+      }
+    }
+    document.getElementById("reconcilePanel").classList.remove("open");
+    refreshClasses();
+  }
+
+  document.getElementById("reconcileApply").addEventListener("click", () => applyReconcile());
+  document.getElementById("reconcileClose").addEventListener("click", () => {
+    document.getElementById("reconcilePanel").classList.remove("open");
+  });
+  // Rouvrir la reconciliation a la demande
+  document.getElementById("reconcileReopen").addEventListener("click", () => {
+    const locals = [];
+    segments.forEach(s => { if (s.label && /^T\d+-/.test(s.label) && !locals.includes(s.label)) locals.push(s.label); });
+    if (locals.length === 0) { alert("Aucune étiquette locale (T1-A, …) à réconcilier dans ce fichier."); return; }
+    openReconcile(locals);
+  });
+
   // Init
   buildControls();
 })();
 </script>
-</body>
-</html>
+
+<div class="recon-overlay" id="reconcilePanel">
+  <div class="recon-modal">
+    <div class="recon-head">
+      <h2>Réconcilier les locuteurs</h2>
+      <p>La diarisation a produit des locuteurs <b>distincts par tronçon</b> (T1-A, T2-B…).
+         Écoute un extrait de chacun et associe-le à un locuteur global.</p>
+      <div class="recon-progress" id="reconcileProgress"></div>
+    </div>
+    <div class="recon-list" id="reconcileList"></div>
+    <div class="recon-foot">
+      <button class="btn btn-ghost" id="reconcileClose">Fermer sans appliquer</button>
+      <button class="btn" id="reconcileApply">Appliquer</button>
+    </div>
+  </div>
+</div>
+
+</body></html>
