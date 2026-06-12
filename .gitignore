@@ -4,7 +4,16 @@ config/.env
 !config/.env.example
 
 # === Données sensibles (audios, transcriptions, sorties) ===
-data/
+# On ignore le CONTENU de data/ (audios, transcriptions) mais on conserve
+# l'arborescence du pipeline via les .gitkeep, pour qu'elle existe au clone.
+data/**
+!data/
+!data/a_traiter/
+!data/en_cours/
+!data/transcrit/
+!data/a_taguer/
+!data/archive/
+!data/**/.gitkeep
 !data/.gitkeep
 
 # === Environnement Python ===
