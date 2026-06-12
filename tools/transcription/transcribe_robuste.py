@@ -15,7 +15,7 @@ separes). Le decoupage produit une transcription SANS locuteurs ; l'attribution
 se fait ensuite dans le tagueur (tagger.html).
 
 Usage :
-    python skills/transcription/transcribe_robuste.py "data/entretien_1h30.m4a"
+    python tools/transcription/transcribe_robuste.py "data/entretien_1h30.m4a"
 
 Options :
     --chunk-min    Duree d'un troncon en minutes (defaut 15)

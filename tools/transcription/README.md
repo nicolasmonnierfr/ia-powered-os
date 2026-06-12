@@ -29,7 +29,7 @@ modèles WhisperX/pyannote).
 Depuis la racine du repo, environnement activé (`(.venv)` visible) :
 
 ```powershell
-python skills\transcription\transcribe.py "data\mon_entretien.m4a"
+python tools\transcription\transcribe.py "data\mon_entretien.m4a"
 ```
 
 Options :
@@ -76,7 +76,7 @@ Par défaut 2 (cas de l'entretien 1-à-1). Réduire le nombre remet à « non
 affecté » les segments d'un locuteur supprimé (avec confirmation).
 
 ### Ouverture
-Double-clic sur `skills\transcription\tagger.html` (s'ouvre dans le navigateur).
+Double-clic sur `tools\transcription\tagger.html` (s'ouvre dans le navigateur).
 
 ### Procédure
 1. **Charger l'audio** (bouton « Audio ») — le même fichier que la transcription.
@@ -162,7 +162,7 @@ tronçons sauvegardés au fur et à mesure.
 
 ### Utilisation
 ```powershell
-python skills\transcription\transcribe_robuste.py "data\entretien_1h30.m4a"
+python tools\transcription\transcribe_robuste.py "data\entretien_1h30.m4a"
 ```
 
 Options : `--chunk-min` (défaut 15), `--overlap-sec` (défaut 2),
@@ -184,7 +184,7 @@ réconciliation** : tu écoutes un extrait de chaque locuteur local et tu
 l'associes à un locuteur global. Quelques clics règlent toute la « couture ».
 
 ```powershell
-python skills\transcription\transcribe_robuste.py "data\entretien.m4a" --diarize
+python tools\transcription\transcribe_robuste.py "data\entretien.m4a" --diarize
 ```
 
 > `--diarize` requiert le token HF (config/.env) et porte le chevauchement à 5s

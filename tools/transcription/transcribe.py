@@ -3,15 +3,15 @@
 transcribe.py — Transcription + diarisation d'entretiens via WhisperX (local).
 
 Usage :
-    python skills/transcription/transcribe.py "data/entretien.m4a"
-    python skills/transcription/transcribe.py "data/entretien.m4a" --no-diarize
-    python skills/transcription/transcribe.py "data/entretien.m4a" --speakers 2
+    python tools/transcription/transcribe.py "data/entretien.m4a"
+    python tools/transcription/transcribe.py "data/entretien.m4a" --no-diarize
+    python tools/transcription/transcribe.py "data/entretien.m4a" --speakers 2
 
 Sorties (dans data/transcriptions/ par defaut) :
     <nom>.txt   transcription lisible [locuteur] texte
     <nom>.json  donnees completes (segments, timestamps, locuteurs)
 
-Concu pour CPU (sans GPU NVIDIA). Voir skills/transcription/README.md.
+Concu pour CPU (sans GPU NVIDIA). Voir tools/transcription/README.md.
 """
 
 import argparse

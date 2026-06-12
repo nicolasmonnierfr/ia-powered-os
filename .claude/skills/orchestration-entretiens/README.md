@@ -30,7 +30,7 @@ naturel :
 - « Prépare le tagging » → liste les `.srt` prêts et rappelle comment ouvrir le tagueur.
 
 Le tagging lui-même reste **manuel** (jugement humain) : ouvre
-`skills/transcription/tagger.html`, charge l'audio + le `.srt`, réconcilie les
+`tools/transcription/tagger.html`, charge l'audio + le `.srt`, réconcilie les
 locuteurs.
 
 ## Circulation des fichiers

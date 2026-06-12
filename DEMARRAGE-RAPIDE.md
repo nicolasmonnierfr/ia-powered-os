@@ -47,7 +47,7 @@ d. Coller le token dans `config\.env` (ligne `HUGGINGFACE_TOKEN=`)
 Dépose un fichier audio dans `data\`, puis :
 
 ```powershell
-python skills\transcription\transcribe.py "data\ton_entretien.m4a"
+python tools\transcription\transcribe.py "data\ton_entretien.m4a"
 ```
 
 Les résultats apparaissent dans `data\transcriptions\`.

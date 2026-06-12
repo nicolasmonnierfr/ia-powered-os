@@ -51,7 +51,7 @@ Quand l'utilisateur demande de traiter / lancer / faire avancer les entretiens :
    a. Déplacer l'audio de `a_traiter/` vers `en_cours/`.
    b. Lancer la transcription robuste avec diarisation par tronçon :
       ```
-      .venv\Scripts\python.exe skills\transcription\transcribe_robuste.py "data\en_cours\<fichier>" --diarize
+      .venv\Scripts\python.exe tools\transcription\transcribe_robuste.py "data\en_cours\<fichier>" --diarize
       ```
    c. ⚠️ Cette commande est LONGUE (souvent supérieure à la durée de l'audio).
       La laisser finir. Si elle est interrompue, la relancer À L'IDENTIQUE :
@@ -79,7 +79,7 @@ Quand l'utilisateur demande l'état / le point / "où on en est" :
 Quand l'utilisateur veut taguer :
 
 - Lister les `.srt` dans `data/a_taguer/`.
-- Rappeler que le tagging est manuel : ouvrir `skills/transcription/tagger.html`
+- Rappeler que le tagging est manuel : ouvrir `tools/transcription/tagger.html`
   dans le navigateur, y charger l'audio (depuis `transcrit/` ou `archive/`) et le
   `.srt` correspondant. La réconciliation des locuteurs (étiquettes T1-A, T2-B…)
   se fait dans le tagueur.
@@ -98,8 +98,8 @@ Quand l'utilisateur veut taguer :
 
 ## Référence des scripts
 
-- `skills/transcription/transcribe_robuste.py` — transcription longue, robuste
+- `tools/transcription/transcribe_robuste.py` — transcription longue, robuste
   (tronçons + reprise). Option `--diarize` pour la diarisation par tronçon.
-- `skills/transcription/transcribe.py` — transcription simple (audios courts).
-- `skills/transcription/tagger.html` — tagueur de locuteurs (manuel).
-- Voir `skills/transcription/README.md` pour le détail des options.
+- `tools/transcription/transcribe.py` — transcription simple (audios courts).
+- `tools/transcription/tagger.html` — tagueur de locuteurs (manuel).
+- Voir `tools/transcription/README.md` pour le détail des options.
