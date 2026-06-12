@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tagueur de locuteurs — IA-Powered-OS</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --panel-2: #232732;
+    --line: #2e3340;
+    --ink: #e6e8ec;
+    --ink-dim: #9aa1ad;
+    --ink-faint: #5e6470;
+    --untagged: #3a3f4b;
+    --playing: #2e3a2c;
+    --playing-edge: #6fae5a;
+    /* Locuteurs 1..4 : couleur vive + texte clair derive */
+    --loc0: #e8a04e; --loc0-text: #f3d9b6;  /* ambre */
+    --loc1: #4ea0e8; --loc1-text: #bcdcf6;  /* bleu */
+    --loc2: #5ec488; --loc2-text: #c2ead2;  /* vert */
+    --loc3: #c98bdb; --loc3-text: #e7cef0;  /* mauve */
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.5;
+  }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  header {
+    flex: 0 0 auto; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+  }
+  header h1 {
+    font-size: 14px; font-weight: 600; letter-spacing: 0.02em;
+    margin: 0; color: var(--ink-dim); white-space: nowrap;
+  }
+  .file-loaders { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .loader { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-dim); }
+  input[type="file"] { font-size: 12px; color: var(--ink-faint); max-width: 200px; }
+
+  .count-picker {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--ink-dim); white-space: nowrap;
+  }
+  .count-picker select {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; font-size: 13px;
+  }
+
+  .stats { margin-left: auto; display: flex; gap: 16px; font-size: 13px; color: var(--ink-dim); white-space: nowrap; flex-wrap: wrap; }
+  .stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stat.warn b { color: var(--loc0); }
+
+  .audio-bar {
+    flex: 0 0 auto; background: var(--panel-2);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  audio { width: 100%; height: 36px; }
+  .speed { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-dim); white-space: nowrap; }
+  .speed select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+
+  .tag-controls {
+    flex: 0 0 auto; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 16px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+    border-radius: 6px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px; transition: filter .1s;
+  }
+  .btn:hover { filter: brightness(1.25); }
+  .btn:active { transform: translateY(1px); }
+  .btn .kbd { font-size: 11px; color: var(--ink-faint); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; background: var(--bg); }
+  .btn .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .mode-hint { font-size: 12px; color: var(--ink-faint); margin-left: 4px; flex-basis: 100%; }
+  .sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+  .btn-ghost { background: transparent; }
+  .group-seg, .group-turn { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .group-label { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
+
+  .segments { flex: 1 1 auto; overflow-y: auto; padding: 8px 0 40vh 0; }
+  .seg {
+    display: grid; grid-template-columns: 70px 14px 1fr; gap: 10px; align-items: start;
+    padding: 7px 16px; border-left: 3px solid transparent; cursor: pointer; border-bottom: 1px solid transparent;
+  }
+  .seg:hover { background: rgba(255,255,255,0.03); }
+  .seg.selected { background: rgba(255,255,255,0.06); border-bottom-color: var(--line); }
+  .seg.playing { background: var(--playing); border-left-color: var(--playing-edge); }
+  .seg .time { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
+  .seg .marker { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--untagged); }
+  .seg .text { color: var(--ink); }
+  .seg.untagged .text { color: var(--ink-dim); }
+  .seg .turn-badge { display: inline-block; font-size: 10px; border-radius: 3px; padding: 0 4px; margin-right: 6px; vertical-align: middle; }
+
+  footer { flex: 0 0 auto; background: var(--panel); border-top: 1px solid var(--line); padding: 8px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-dim); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 50%; }
+  .footer-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .empty { padding: 40px 24px; color: var(--ink-faint); font-size: 14px; text-align: center; }
+  .empty code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px; color: var(--ink-dim); }
+
+  .help-toggle { cursor: pointer; color: var(--ink-faint); font-size: 12px; }
+  .help-panel {
+    display: none; position: fixed; bottom: 50px; right: 16px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 18px; font-size: 12px; color: var(--ink-dim); max-width: 340px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 20;
+  }
+  .help-panel.open { display: block; }
+  .help-panel h3 { margin: 0 0 8px; font-size: 12px; color: var(--ink); }
+  .help-panel dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+  .help-panel dt { color: var(--ink); font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Tagueur de locuteurs</h1>
+  <div class="file-loaders">
+    <label class="loader">Audio <input type="file" id="audioFile" accept="audio/*,video/*"></label>
+    <label class="loader">Transcription .srt <input type="file" id="srtFile" accept=".srt,.vtt,text/plain"></label>
+  </div>
+  <div class="count-picker">
+    Locuteurs
+    <select id="speakerCount">
+      <option value="2" selected>2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="audio-bar">
+  <audio id="player" controls preload="metadata"></audio>
+  <div class="speed">
+    Vitesse
+    <select id="speed">
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.25">1.25×</option>
+      <option value="1.5">1.5×</option>
+      <option value="2">2×</option>
+    </select>
+  </div>
+</div>
+
+<div class="tag-controls">
+  <div class="group-seg" id="groupSeg">
+    <span class="group-label">Segment</span>
+    <!-- boutons injectes -->
+  </div>
+  <span class="sep"></span>
+  <div class="group-turn" id="groupTurn">
+    <span class="group-label">Prise de parole</span>
+    <!-- boutons injectes -->
+  </div>
+  <span class="sep"></span>
+  <button class="btn btn-ghost" data-action="clear"><span class="kbd">0</span>Effacer</button>
+  <span class="mode-hint">« Prise de parole » : affecte ce segment et tous les suivants jusqu'au prochain changement marqué.</span>
+</div>
+
+<div class="segments" id="segList">
+  <div class="empty">
+    Charge un fichier <code>audio</code> et sa transcription <code>.srt</code> pour commencer.<br><br>
+    Astuce : génère le <code>.srt</code> avec <code>transcribe.py</code> (avec ou sans <code>--no-diarize</code>).
+  </div>
+</div>
+
+<footer>
+  <div class="legend" id="legend"></div>
+  <div class="footer-actions">
+    <span class="help-toggle" id="helpToggle">Raccourcis ?</span>
+    <button class="btn btn-ghost" id="renameBtns"></button>
+    <button class="btn" id="exportTxt">Exporter .txt</button>
+    <button class="btn" id="exportSrt">Exporter .srt</button>
+  </div>
+</footer>
+
+<div class="help-panel" id="helpPanel">
+  <h3>Raccourcis clavier</h3>
+  <dl>
+    <dt>Espace</dt><dd>Lecture / pause</dd>
+    <dt>1 … 4</dt><dd>Affecter le segment au locuteur N</dd>
+    <dt>Maj+1 … 4</dt><dd>Nouvelle prise de parole (ce segment + suivants)</dd>
+    <dt>0</dt><dd>Effacer l'affectation</dd>
+    <dt>↑ / ↓</dt><dd>Segment précédent / suivant</dd>
+    <dt>← / →</dt><dd>Reculer / avancer l'audio de 3 s</dd>
+    <dt>Entrée</dt><dd>Lire le segment sélectionné depuis son début</dd>
+  </dl>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const MAX = 4;
+  let nSpeakers = 2;
+  let segments = [];   // { start, end, text, speaker:0..3|null, turnStart:bool }
+  let selected = -1;
+  let names = ["Locuteur 1", "Locuteur 2", "Locuteur 3", "Locuteur 4"];
+
+  const player = document.getElementById("player");
+  const segList = document.getElementById("segList");
+  const statsEl = document.getElementById("stats");
+  const legendEl = document.getElementById("legend");
+  const groupSeg = document.getElementById("groupSeg");
+  const groupTurn = document.getElementById("groupTurn");
+
+  function locVar(i) { return `var(--loc${i})`; }
+  function locTextVar(i) { return `var(--loc${i}-text)`; }
+
+  // ---- Construction des controles selon nSpeakers ----
+  function buildControls() {
+    // Boutons "segment"
+    groupSeg.querySelectorAll(".btn").forEach(b => b.remove());
+    groupTurn.querySelectorAll(".btn").forEach(b => b.remove());
+    for (let i = 0; i < nSpeakers; i++) {
+      const b = document.createElement("button");
+      b.className = "btn";
+      b.style.borderColor = locVar(i);
+      b.dataset.action = "tag";
+      b.dataset.loc = i;
+      b.innerHTML = `<span class="dot" style="background:${locVar(i)}"></span>${names[i]}<span class="kbd">${i+1}</span>`;
+      groupSeg.appendChild(b);
+
+      const t = document.createElement("button");
+      t.className = "btn";
+      t.style.borderColor = locVar(i);
+      t.dataset.action = "turn";
+      t.dataset.loc = i;
+      t.innerHTML = `<span class="kbd">Maj+${i+1}</span>→ ${names[i]}`;
+      groupTurn.appendChild(t);
+    }
+    buildStats();
+    buildLegend();
+  }
+
+  function buildStats() {
+    statsEl.innerHTML = `<span class="stat">Segments <b id="statTotal">0</b></span>
+      <span class="stat warn">Non affectés <b id="statUntagged">0</b></span>`;
+    for (let i = 0; i < nSpeakers; i++) {
+      statsEl.innerHTML += `<span class="stat">${names[i]} <b id="statLoc${i}">0</b></span>`;
+    }
+  }
+
+  function buildLegend() {
+    let html = "";
+    for (let i = 0; i < nSpeakers; i++) {
+      html += `<span><span class="sw" style="background:${locVar(i)}"></span>${names[i]}</span>`;
+    }
+    html += `<span><span class="sw" style="background:var(--untagged)"></span>Non affecté</span>`;
+    legendEl.innerHTML = html;
+  }
+
+  // ---- Parsing SRT ----
+  function parseTime(t) {
+    t = t.trim().replace(",", ".");
+    const parts = t.split(":");
+    let h = 0, m = 0, s = 0;
+    if (parts.length === 3) { h = +parts[0]; m = +parts[1]; s = +parts[2]; }
+    else if (parts.length === 2) { m = +parts[0]; s = +parts[1]; }
+    else { s = +parts[0]; }
+    return h * 3600 + m * 60 + s;
+  }
+  function stripSpeakerPrefix(text) {
+    // Retourne { text, label } ; label = etiquette entre crochets si presente, sinon null.
+    const m = text.match(/^\s*\[([^\]]+)\]\s*/);
+    if (m) {
+      const label = m[1].trim();
+      // On ignore une etiquette "NON_AFFECTE" (issue d'un export precedent)
+      if (label.toUpperCase() === "NON_AFFECTE") return { text: text.slice(m[0].length), label: null };
+      return { text: text.slice(m[0].length), label };
+    }
+    return { text: text, label: null };
+  }
+  // parseSRT renvoie { segments, labels } ou labels = ordre d'apparition des etiquettes
+  function parseSRT(raw) {
+    const blocks = raw.replace(/\r/g, "").split(/\n\s*\n/);
+    const out = [];
+    const labelOrder = [];   // etiquettes dans l'ordre de premiere apparition
+    for (const block of blocks) {
+      const lines = block.split("\n").filter(l => l.trim() !== "");
+      if (lines.length < 2) continue;
+      let tl = -1;
+      for (let i = 0; i < lines.length; i++) { if (lines[i].includes("-->")) { tl = i; break; } }
+      if (tl === -1) continue;
+      const [a, b] = lines[tl].split("-->");
+      const start = parseTime(a), end = parseTime(b);
+      const parsed = stripSpeakerPrefix(lines.slice(tl + 1).join(" ").trim());
+      if (parsed.label && !labelOrder.includes(parsed.label)) labelOrder.push(parsed.label);
+      out.push({ start, end, text: parsed.text, label: parsed.label, speaker: null, turnStart: false });
+    }
+    return { segments: out, labels: labelOrder };
+  }
+
+  function fmt(t) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+    const mm = String(m).padStart(2, "0"), ss = String(s).padStart(2, "0");
+    return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  }
+
+  function render() {
+    if (segments.length === 0) return;
+    segList.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    segments.forEach((seg, i) => {
+      const div = document.createElement("div");
+      div.className = "seg" + (seg.speaker === null ? " untagged" : "");
+      if (i === selected) div.classList.add("selected");
+      div.dataset.i = i;
+
+      const time = document.createElement("div");
+      time.className = "time"; time.textContent = fmt(seg.start);
+
+      const marker = document.createElement("div");
+      marker.className = "marker";
+      if (seg.speaker !== null) marker.style.background = locVar(seg.speaker);
+
+      const text = document.createElement("div");
+      text.className = "text";
+      if (seg.speaker !== null) text.style.color = locTextVar(seg.speaker);
+      if (seg.turnStart && seg.speaker !== null) {
+        const badge = document.createElement("span");
+        badge.className = "turn-badge";
+        badge.style.color = locVar(seg.speaker);
+        badge.style.border = `1px solid ${locVar(seg.speaker)}`;
+        badge.textContent = "▸ " + names[seg.speaker];
+        text.appendChild(badge);
+      }
+      text.appendChild(document.createTextNode(seg.text));
+
+      div.appendChild(time); div.appendChild(marker); div.appendChild(text);
+      frag.appendChild(div);
+    });
+    segList.appendChild(frag);
+    updateStats();
+  }
+
+  function refreshClasses() {
+    segList.querySelectorAll(".seg").forEach(node => {
+      const i = +node.dataset.i, seg = segments[i];
+      node.classList.remove("untagged", "selected");
+      if (seg.speaker === null) node.classList.add("untagged");
+      if (i === selected) node.classList.add("selected");
+      const marker = node.querySelector(".marker");
+      marker.style.background = seg.speaker !== null ? locVar(seg.speaker) : "";
+      const textEl = node.querySelector(".text");
+      textEl.style.color = seg.speaker !== null ? locTextVar(seg.speaker) : "";
+      textEl.innerHTML = "";
+      if (seg.turnStart && seg.speaker !== null) {
+        const badge = document.createElement("span");
+        badge.className = "turn-badge";
+        badge.style.color = locVar(seg.speaker);
+        badge.style.border = `1px solid ${locVar(seg.speaker)}`;
+        badge.textContent = "▸ " + names[seg.speaker];
+        textEl.appendChild(badge);
+      }
+      textEl.appendChild(document.createTextNode(seg.text));
+    });
+    updateStats();
+  }
+
+  function updateStats() {
+    const counts = new Array(nSpeakers).fill(0);
+    let u = 0;
+    for (const s of segments) {
+      if (s.speaker === null || s.speaker >= nSpeakers) u++;
+      else counts[s.speaker]++;
+    }
+    const total = document.getElementById("statTotal");
+    const unt = document.getElementById("statUntagged");
+    if (total) total.textContent = segments.length;
+    if (unt) unt.textContent = u;
+    for (let i = 0; i < nSpeakers; i++) {
+      const el = document.getElementById("statLoc" + i);
+      if (el) el.textContent = counts[i];
+    }
+  }
+
+  function tagSegment(i, sp) {
+    if (i < 0 || i >= segments.length) return;
+    segments[i].speaker = sp; segments[i].turnStart = false; refreshClasses();
+  }
+  function tagTurn(i, sp) {
+    if (i < 0 || i >= segments.length) return;
+    segments[i].speaker = sp; segments[i].turnStart = true;
+    for (let j = i + 1; j < segments.length; j++) {
+      if (segments[j].turnStart) break;
+      segments[j].speaker = sp;
+    }
+    refreshClasses();
+  }
+  function clearSegment(i) {
+    if (i < 0 || i >= segments.length) return;
+    segments[i].speaker = null; segments[i].turnStart = false; refreshClasses();
+  }
+  function select(i, seek) {
+    if (i < 0 || i >= segments.length) return;
+    selected = i; refreshClasses();
+    const node = segList.querySelector(`.seg[data-i="${i}"]`);
+    if (node) node.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (seek) { player.currentTime = segments[i].start; player.play(); }
+  }
+
+  let lastPlaying = -1;
+  player.addEventListener("timeupdate", () => {
+    const t = player.currentTime;
+    let cur = -1;
+    for (let i = 0; i < segments.length; i++) {
+      if (t >= segments[i].start && t < segments[i].end) { cur = i; break; }
+      if (t < segments[i].start) break;
+    }
+    if (cur !== lastPlaying) {
+      if (lastPlaying >= 0) {
+        const old = segList.querySelector(`.seg[data-i="${lastPlaying}"]`);
+        if (old) old.classList.remove("playing");
+      }
+      if (cur >= 0) {
+        const node = segList.querySelector(`.seg[data-i="${cur}"]`);
+        if (node) { node.classList.add("playing"); node.scrollIntoView({ block: "nearest" }); }
+      }
+      lastPlaying = cur;
+    }
+  });
+
+  segList.addEventListener("click", (e) => {
+    const seg = e.target.closest(".seg");
+    if (!seg) return;
+    select(+seg.dataset.i, true);
+  });
+
+  document.querySelector(".tag-controls").addEventListener("click", (e) => {
+    const btn = e.target.closest(".btn");
+    if (!btn) return;
+    const action = btn.dataset.action;
+    if (action === "clear") { if (selected >= 0) clearSegment(selected); return; }
+    if (selected < 0) return;
+    const loc = +btn.dataset.loc;
+    if (action === "tag") {
+      tagSegment(selected, loc);
+      if (selected < segments.length - 1) select(selected + 1, false);
+    } else if (action === "turn") {
+      tagTurn(selected, loc);
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input, select, textarea")) return;
+    if (segments.length === 0) return;
+    if (e.code === "Space") { e.preventDefault(); player.paused ? player.play() : player.pause(); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); select(Math.min(selected + 1, segments.length - 1), false); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); select(Math.max(selected - 1, 0), false); return; }
+    if (e.key === "ArrowRight"){ e.preventDefault(); player.currentTime = Math.min(player.currentTime + 3, player.duration || 1e9); return; }
+    if (e.key === "ArrowLeft") { e.preventDefault(); player.currentTime = Math.max(player.currentTime - 3, 0); return; }
+    if (e.key === "Enter")     { e.preventDefault(); if (selected >= 0) { player.currentTime = segments[selected].start; player.play(); } return; }
+    if (selected < 0) return;
+    if (e.key === "0") { clearSegment(selected); return; }
+    const num = parseInt(e.key, 10);
+    if (!isNaN(num) && num >= 1 && num <= nSpeakers) {
+      if (e.shiftKey) { tagTurn(selected, num - 1); }
+      else { tagSegment(selected, num - 1); if (selected < segments.length - 1) select(selected + 1, false); }
+    }
+  });
+
+  document.getElementById("speed").addEventListener("change", (e) => {
+    player.playbackRate = parseFloat(e.target.value);
+  });
+
+  document.getElementById("speakerCount").addEventListener("change", (e) => {
+    const newN = parseInt(e.target.value, 10);
+    // Avertir si des segments utilisent un locuteur qui depasse le nouveau max
+    if (newN < nSpeakers) {
+      const over = segments.some(s => s.speaker !== null && s.speaker >= newN);
+      if (over && !confirm(`Des segments sont affectés à un locuteur > ${newN}. Ils repasseront en "non affecté". Continuer ?`)) {
+        e.target.value = String(nSpeakers);
+        return;
+      }
+      // Remettre a null ceux qui depassent
+      segments.forEach(s => { if (s.speaker !== null && s.speaker >= newN) { s.speaker = null; s.turnStart = false; } });
+    }
+    nSpeakers = newN;
+    buildControls();
+    render();
+  });
+
+  document.getElementById("audioFile").addEventListener("change", (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    player.src = URL.createObjectURL(f);
+  });
+  document.getElementById("srtFile").addEventListener("change", (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const parsed = parseSRT(reader.result);
+      segments = parsed.segments;
+      const labels = parsed.labels;
+
+      // Pre-remplissage depuis la diarisation : mapping label -> locuteur (ordre d'apparition)
+      if (labels.length > 0) {
+        const usable = Math.min(labels.length, MAX);
+        // Ajuster le selecteur au nombre de locuteurs detectes (plafonne a MAX, plancher a 2)
+        const targetN = Math.max(2, usable);
+        nSpeakers = targetN;
+        document.getElementById("speakerCount").value = String(targetN);
+
+        // Construire la table label -> index (les labels au-dela de MAX restent non affectes)
+        const map = {};
+        labels.forEach((lab, idx) => { if (idx < MAX) map[lab] = idx; });
+
+        let dropped = 0;
+        let prevSpeaker = null;
+        for (const seg of segments) {
+          if (seg.label && map[seg.label] !== undefined) {
+            seg.speaker = map[seg.label];
+            // Marquer un debut de prise de parole a chaque changement de locuteur
+            seg.turnStart = (seg.speaker !== prevSpeaker);
+            prevSpeaker = seg.speaker;
+          } else {
+            seg.speaker = null;
+            seg.turnStart = false;
+            prevSpeaker = null;
+            if (seg.label) dropped++;
+          }
+        }
+        buildControls();
+        if (labels.length > MAX) {
+          alert(`Le fichier contient ${labels.length} locuteurs. L'outil en gère ${MAX} au maximum ; les segments des locuteurs supplémentaires sont laissés en « non affecté » (${dropped} segment(s)).`);
+        }
+      }
+
+      selected = segments.length ? 0 : -1;
+      lastPlaying = -1;
+      render();
+      if (selected >= 0) select(0, false);
+    };
+    reader.readAsText(f, "utf-8");
+  });
+
+  // Renommage : un seul bouton qui demande tous les noms actifs
+  document.getElementById("renameBtns").textContent = "Renommer les locuteurs";
+  document.getElementById("renameBtns").addEventListener("click", () => {
+    for (let i = 0; i < nSpeakers; i++) {
+      const n = prompt(`Nom du Locuteur ${i + 1} :`, names[i]);
+      if (n && n.trim()) names[i] = n.trim();
+    }
+    buildControls();
+    refreshClasses();
+  });
+
+  function download(filename, content) {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+  function speakerName(s) { return (s === null || s >= nSpeakers) ? "NON_AFFECTE" : names[s]; }
+
+  document.getElementById("exportTxt").addEventListener("click", () => {
+    if (segments.length === 0) return;
+    let out = "", cur;
+    for (const seg of segments) {
+      if (seg.speaker !== cur) { out += `\n[${speakerName(seg.speaker)}] (${fmt(seg.start)})\n`; cur = seg.speaker; }
+      out += seg.text + " ";
+    }
+    download("transcription_taggee.txt", out.trim() + "\n");
+  });
+
+  function srtTime(t) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+    const ms = Math.round((t - Math.floor(t)) * 1000);
+    const p = (n, l) => String(n).padStart(l, "0");
+    return `${p(h,2)}:${p(m,2)}:${p(s,2)},${p(ms,3)}`;
+  }
+  document.getElementById("exportSrt").addEventListener("click", () => {
+    if (segments.length === 0) return;
+    let out = "";
+    segments.forEach((seg, i) => {
+      out += `${i + 1}\n${srtTime(seg.start)} --> ${srtTime(seg.end)}\n[${speakerName(seg.speaker)}] ${seg.text}\n\n`;
+    });
+    download("transcription_taggee.srt", out);
+  });
+
+  document.getElementById("helpToggle").addEventListener("click", () => {
+    document.getElementById("helpPanel").classList.toggle("open");
+  });
+
+  // Init
+  buildControls();
+})();
+</script>
+</body>
+</html>

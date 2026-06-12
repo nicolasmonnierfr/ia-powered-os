@@ -49,6 +49,22 @@ def fmt_timestamp(seconds):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def fmt_srt_timestamp(seconds):
+    """Convertit des secondes en HH:MM:SS,mmm (format SRT)."""
+    if seconds is None:
+        seconds = 0.0
+    if seconds < 0:
+        seconds = 0.0
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    ms = int(round((seconds - int(seconds)) * 1000))
+    if ms == 1000:  # arrondi limite
+        ms = 0
+        s += 1
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
 def make_diarization_pipeline(hf_token, device):
     """
     Cree le pipeline de diarisation en absorbant les variantes d'API
@@ -184,8 +200,32 @@ def main():
             f.write(f"{text} ")
         f.write("\n")
 
+    # --- SRT : un sous-titre par segment, horodate, pour le tagueur ---
+    srt_path = out_dir / f"{stem}.srt"
+    with open(srt_path, "w", encoding="utf-8") as f:
+        index = 1
+        for seg in result.get("segments", []):
+            text = seg.get("text", "").strip()
+            if not text:
+                continue
+            start = seg.get("start")
+            end = seg.get("end")
+            # Securite : si end manquant ou <= start, on met start + 1s
+            if end is None or (start is not None and end <= start):
+                end = (start or 0) + 1.0
+            speaker = seg.get("speaker")  # peut etre None
+            f.write(f"{index}\n")
+            f.write(f"{fmt_srt_timestamp(start)} --> {fmt_srt_timestamp(end)}\n")
+            # On prefixe le locuteur s'il existe (le tagueur pourra l'ignorer/ecraser)
+            if speaker:
+                f.write(f"[{speaker}] {text}\n\n")
+            else:
+                f.write(f"{text}\n\n")
+            index += 1
+
     print(f"{elapsed()} Termine.")
     print(f"  -> {txt_path}")
+    print(f"  -> {srt_path}")
     print(f"  -> {json_path}")
 
 
