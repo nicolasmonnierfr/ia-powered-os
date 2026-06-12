@@ -1,0 +1,36 @@
+# === Secrets (JAMAIS dans Git) ===
+config/.env
+*.env
+!config/.env.example
+
+# === Données sensibles (audios, transcriptions, sorties) ===
+data/
+!data/.gitkeep
+
+# === Environnement Python ===
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+
+# === Modèles téléchargés (volumineux, re-téléchargeables) ===
+models/
+*.bin
+*.pt
+*.onnx
+
+# === IDE / OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs & temporaires ===
+*.log
+tmp/
+temp/
