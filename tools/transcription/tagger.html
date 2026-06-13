@@ -56,6 +56,7 @@
   .stats { margin-left: auto; display: flex; gap: 16px; font-size: 13px; color: var(--ink-dim); white-space: nowrap; flex-wrap: wrap; }
   .stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
   .stat.warn b { color: var(--loc0); }
+  .stat.cut-stat b { color: #e5484d; }
 
   .audio-bar {
     flex: 0 0 auto; background: var(--panel-2);
@@ -86,7 +87,6 @@
   .group-seg, .group-turn { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .group-label { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
 
-  .segments { flex: 1 1 auto; overflow-y: auto; padding: 8px 0 40vh 0; }
   .seg {
     display: grid; grid-template-columns: 70px 14px 1fr; gap: 10px; align-items: start;
     padding: 7px 16px; border-left: 3px solid transparent; cursor: pointer; border-bottom: 1px solid transparent;
@@ -98,6 +98,28 @@
   .seg .marker { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--untagged); }
   .seg .text { color: var(--ink); }
   .seg.untagged .text { color: var(--ink-dim); }
+  .seg .text .edit-hint { opacity: 0; font-size: 11px; color: var(--ink-faint); margin-left: 8px; transition: opacity .1s; }
+  .seg:hover .text .edit-hint { opacity: 1; }
+  .seg .text-edit {
+    width: 100%; background: var(--bg); color: var(--ink);
+    border: 1px solid var(--playing-edge); border-radius: 4px;
+    padding: 6px 8px; font: inherit; line-height: 1.5; resize: vertical;
+    min-height: 2.4em;
+  }
+  .seg.edited .marker { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--ink-faint); }
+  .seg.cut {
+    opacity: 0.5;
+  }
+  .seg.cut .text { text-decoration: line-through; text-decoration-color: #e5484d; }
+  .seg.cut .time::after {
+    content: "✂"; color: #e5484d; margin-left: 4px; font-size: 11px;
+  }
+  /* marque "coupe" dans la zone couleurs de la minimap (barre rouge a gauche) */
+  .mm-colors .mm-cut {
+    position: absolute; left: 0; width: 3px;
+    background: #e5484d; box-shadow: 0 0 3px #e5484d; z-index: 2;
+  }
+  .mm-colors .mm-band.is-cut { opacity: 0.28; }
   .seg .turn-badge { display: inline-block; font-size: 10px; border-radius: 3px; padding: 0 4px; margin-right: 6px; vertical-align: middle; }
 
   footer { flex: 0 0 auto; background: var(--panel); border-top: 1px solid var(--line); padding: 8px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -151,6 +173,44 @@
     padding: 14px 22px; border-top: 1px solid var(--line);
     display: flex; gap: 10px; justify-content: flex-end;
   }
+
+  /* ---- Minimap verticale : 2 zones ---- */
+  .main { flex: 1 1 auto; display: flex; min-height: 0; }
+  .segments { flex: 1 1 auto; overflow-y: auto; padding: 8px 0 40vh 0; }
+  .minimap {
+    flex: 0 0 auto; width: 50px; position: relative;
+    background: var(--panel); border-left: 1px solid var(--line);
+    display: flex; overflow: hidden;
+  }
+  /* zone couleurs (locuteurs) */
+  .mm-colors {
+    position: relative; flex: 1 1 auto; cursor: pointer;
+    background: var(--bg);
+  }
+  .mm-colors .mm-band { position: absolute; left: 0; right: 0; }
+  /* zone controle (curseur + non-taggés) */
+  .mm-ctrl {
+    position: relative; flex: 0 0 20px;
+    border-left: 1px solid var(--line); background: var(--panel-2);
+    cursor: pointer;
+  }
+  .mm-ctrl .mm-untag {
+    position: absolute; left: 1px; right: 1px;
+    background: #e5484d; border-radius: 1px;
+    box-shadow: 0 0 3px #e5484d;
+  }
+  .mm-play-tri {
+    position: absolute; right: -1px; width: 0; height: 0;
+    border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+    border-right: 7px solid var(--playing-edge);
+    filter: drop-shadow(0 0 2px var(--playing-edge));
+    transform: translateY(-5px); pointer-events: none;
+  }
+  .mm-view {
+    position: absolute; left: 0; right: 0;
+    background: rgba(255,255,255,0.08); border-top: 1px solid rgba(255,255,255,0.25);
+    border-bottom: 1px solid rgba(255,255,255,0.25); pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -198,13 +258,21 @@
   </div>
   <span class="sep"></span>
   <button class="btn btn-ghost" data-action="clear"><span class="kbd">0</span>Effacer</button>
-  <span class="mode-hint">« Prise de parole » : affecte ce segment et tous les suivants jusqu'au prochain changement marqué.</span>
+  <span class="sep"></span>
+  <button class="btn btn-ghost" data-action="cut" id="btnCut"><span class="kbd">C</span>✂ Couper</button>
+  <span class="mode-hint">« Prise de parole » : affecte ce segment et tous les suivants jusqu'au prochain changement marqué. « Couper » : marque le(s) segment(s) sélectionné(s) comme à retirer (réversible) ; l'audio et la transcription seront raccourcis à l'export.</span>
 </div>
 
-<div class="segments" id="segList">
-  <div class="empty">
-    Charge un fichier <code>audio</code> et sa transcription <code>.srt</code> pour commencer.<br><br>
-    Astuce : génère le <code>.srt</code> avec <code>transcribe.py</code> (avec ou sans <code>--no-diarize</code>).
+<div class="main">
+  <div class="segments" id="segList">
+    <div class="empty">
+      Charge un fichier <code>audio</code> et sa transcription <code>.srt</code> pour commencer.<br><br>
+      Astuce : génère le <code>.srt</code> avec <code>transcribe.py</code> (avec ou sans <code>--no-diarize</code>).
+    </div>
+  </div>
+  <div class="minimap" id="minimap" title="Vue globale — clic pour naviguer">
+    <div class="mm-colors" id="mmColors"></div>
+    <div class="mm-ctrl" id="mmCtrl"></div>
   </div>
 </div>
 
@@ -216,6 +284,7 @@
     <button class="btn btn-ghost" id="renameBtns"></button>
     <button class="btn" id="exportTxt">Exporter .txt</button>
     <button class="btn" id="exportSrt">Exporter .srt</button>
+    <button class="btn" id="exportCut" title="Plan de coupe pour reconstruire l'audio raccourci">Exporter plan de coupe</button>
   </div>
 </footer>
 
@@ -226,9 +295,12 @@
     <dt>1 … 4</dt><dd>Affecter le segment au locuteur N</dd>
     <dt>Maj+1 … 4</dt><dd>Nouvelle prise de parole (ce segment + suivants)</dd>
     <dt>0</dt><dd>Effacer l'affectation</dd>
+    <dt>C</dt><dd>Couper / rétablir le(s) segment(s) sélectionné(s)</dd>
     <dt>↑ / ↓</dt><dd>Segment précédent / suivant</dd>
+    <dt>Maj+↑ / ↓</dt><dd>Étendre la sélection (taguer plusieurs segments d'un coup)</dd>
     <dt>← / →</dt><dd>Reculer / avancer l'audio de 3 s</dd>
     <dt>Entrée</dt><dd>Lire le segment sélectionné depuis son début</dd>
+    <dt>Double-clic</dt><dd>Éditer le texte d'un segment (Entrée valide, Échap annule)</dd>
   </dl>
 </div>
 
@@ -254,8 +326,9 @@
 
   const MAX = 4;
   let nSpeakers = 2;
-  let segments = [];   // { start, end, text, speaker:0..3|null, turnStart:bool }
-  let selected = -1;
+  let segments = [];   // { start, end, text, speaker:0..3|null, turnStart:bool, edited:bool, cut:bool }
+  let selected = -1;   // ancre de selection / segment courant
+  let selAnchor = -1;  // debut de plage pour la selection multiple (Maj+fleche)
   let names = ["Locuteur 1", "Locuteur 2", "Locuteur 3", "Locuteur 4"];
 
   const player = document.getElementById("player");
@@ -264,9 +337,23 @@
   const legendEl = document.getElementById("legend");
   const groupSeg = document.getElementById("groupSeg");
   const groupTurn = document.getElementById("groupTurn");
+  const minimap = document.getElementById("minimap");
+  const mmColors = document.getElementById("mmColors");
+  const mmCtrl = document.getElementById("mmCtrl");
 
   function locVar(i) { return `var(--loc${i})`; }
   function locTextVar(i) { return `var(--loc${i}-text)`; }
+
+  // Plage de selection courante (contigue), bornee [lo, hi] inclus.
+  function selRange() {
+    if (selected < 0) return null;
+    const a = selAnchor < 0 ? selected : selAnchor;
+    return { lo: Math.min(a, selected), hi: Math.max(a, selected) };
+  }
+  function inSelection(i) {
+    const r = selRange();
+    return r && i >= r.lo && i <= r.hi;
+  }
 
   // ---- Construction des controles selon nSpeakers ----
   function buildControls() {
@@ -300,6 +387,7 @@
     for (let i = 0; i < nSpeakers; i++) {
       statsEl.innerHTML += `<span class="stat">${names[i]} <b id="statLoc${i}">0</b></span>`;
     }
+    statsEl.innerHTML += `<span class="stat cut-stat" id="statCutWrap" style="display:none">✂ Coupé <b id="statCut">0</b></span>`;
   }
 
   function buildLegend() {
@@ -364,8 +452,8 @@
     const frag = document.createDocumentFragment();
     segments.forEach((seg, i) => {
       const div = document.createElement("div");
-      div.className = "seg" + (seg.speaker === null ? " untagged" : "");
-      if (i === selected) div.classList.add("selected");
+      div.className = "seg" + (seg.speaker === null ? " untagged" : "") + (seg.edited ? " edited" : "") + (seg.cut ? " cut" : "");
+      if (inSelection(i)) div.classList.add("selected");
       div.dataset.i = i;
 
       const time = document.createElement("div");
@@ -387,6 +475,10 @@
         text.appendChild(badge);
       }
       text.appendChild(document.createTextNode(seg.text));
+      const hint = document.createElement("span");
+      hint.className = "edit-hint";
+      hint.textContent = "double-clic pour éditer";
+      text.appendChild(hint);
 
       div.appendChild(time); div.appendChild(marker); div.appendChild(text);
       frag.appendChild(div);
@@ -400,10 +492,14 @@
       const i = +node.dataset.i, seg = segments[i];
       node.classList.remove("untagged", "selected");
       if (seg.speaker === null) node.classList.add("untagged");
-      if (i === selected) node.classList.add("selected");
+      if (inSelection(i)) node.classList.add("selected");
+      node.classList.toggle("edited", !!seg.edited);
+      node.classList.toggle("cut", !!seg.cut);
       const marker = node.querySelector(".marker");
       marker.style.background = seg.speaker !== null ? locVar(seg.speaker) : "";
       const textEl = node.querySelector(".text");
+      // Ne pas ecraser un champ d'edition ouvert
+      if (textEl.querySelector(".text-edit")) return;
       textEl.style.color = seg.speaker !== null ? locTextVar(seg.speaker) : "";
       textEl.innerHTML = "";
       if (seg.turnStart && seg.speaker !== null) {
@@ -415,6 +511,10 @@
         textEl.appendChild(badge);
       }
       textEl.appendChild(document.createTextNode(seg.text));
+      const hint = document.createElement("span");
+      hint.className = "edit-hint";
+      hint.textContent = "double-clic pour éditer";
+      textEl.appendChild(hint);
     });
     updateStats();
   }
@@ -434,14 +534,140 @@
       const el = document.getElementById("statLoc" + i);
       if (el) el.textContent = counts[i];
     }
+    // Duree totale coupee
+    let cutCount = 0, cutDur = 0;
+    for (const s of segments) { if (s.cut) { cutCount++; cutDur += (s.end - s.start); } }
+    const wrap = document.getElementById("statCutWrap");
+    const cutEl = document.getElementById("statCut");
+    if (wrap && cutEl) {
+      if (cutCount > 0) {
+        wrap.style.display = "";
+        cutEl.textContent = `${cutCount} seg · ${fmt(cutDur)}`;
+      } else {
+        wrap.style.display = "none";
+      }
+    }
+    renderMinimap();
   }
 
+  // ---- Minimap : bandes proportionnelles a la duree ----
+  function timelineBounds() {
+    if (segments.length === 0) return { t0: 0, span: 1 };
+    const t0 = segments[0].start;
+    const tEnd = segments[segments.length - 1].end;
+    const span = Math.max(tEnd - t0, 0.001);
+    return { t0, span };
+  }
+
+  function renderMinimap() {
+    if (segments.length === 0) { mmColors.innerHTML = ""; mmCtrl.innerHTML = ""; return; }
+    const { t0, span } = timelineBounds();
+
+    // Zone couleurs : un bloc par segment tagué ; les non-taggés laissent voir le fond (--bg)
+    let colors = "";
+    for (const seg of segments) {
+      const top = ((seg.start - t0) / span) * 100;
+      const h = Math.max(((seg.end - seg.start) / span) * 100, 0.3);
+      const untag = (seg.speaker === null || seg.speaker >= nSpeakers);
+      if (!untag) {
+        const cutCls = seg.cut ? " is-cut" : "";
+        colors += `<div class="mm-band${cutCls}" style="top:${top}%;height:${h}%;background:${locVar(seg.speaker)}"></div>`;
+      }
+      // marque de coupe (barre rouge a gauche), visible meme si le segment n'est pas tagué
+      if (seg.cut) {
+        const hc = Math.max(((seg.end - seg.start) / span) * 100, 0.5);
+        colors += `<div class="mm-cut" style="top:${top}%;height:${hc}%"></div>`;
+      }
+    }
+    mmColors.innerHTML = colors;
+
+    // Zone controle : traits pour les non-taggés + curseur + viewport
+    let ctrl = "";
+    for (const seg of segments) {
+      const untag = (seg.speaker === null || seg.speaker >= nSpeakers);
+      if (untag) {
+        const top = ((seg.start - t0) / span) * 100;
+        const h = Math.max(((seg.end - seg.start) / span) * 100, 0.8); // plancher plus haut : un trait toujours visible
+        ctrl += `<div class="mm-untag" style="top:${top}%;height:${h}%"></div>`;
+      }
+    }
+    ctrl += `<div class="mm-view" id="mmView" style="display:none"></div>`;
+    ctrl += `<div class="mm-play-tri" id="mmPlay" style="display:none"></div>`;
+    mmCtrl.innerHTML = ctrl;
+
+    updateMinimapPlayhead();
+    updateMinimapViewport();
+  }
+
+  function updateMinimapPlayhead() {
+    const el = document.getElementById("mmPlay");
+    if (!el || segments.length === 0) return;
+    const { t0, span } = timelineBounds();
+    const t = player.currentTime;
+    if (isNaN(t)) { el.style.display = "none"; return; }
+    const pct = ((t - t0) / span) * 100;
+    if (pct < 0 || pct > 100) { el.style.display = "none"; return; }
+    el.style.display = "block";
+    el.style.top = pct + "%";
+  }
+
+  function updateMinimapViewport() {
+    const el = document.getElementById("mmView");
+    if (!el || segments.length === 0) return;
+    const sc = segList.scrollHeight;
+    if (sc <= segList.clientHeight) { el.style.display = "none"; return; }
+    el.style.display = "block";
+    el.style.top = (segList.scrollTop / sc * 100) + "%";
+    el.style.height = (segList.clientHeight / sc * 100) + "%";
+  }
+
+  // Clic sur l'une ou l'autre zone -> aller au segment a cette position verticale
+  function minimapClick(e) {
+    if (segments.length === 0) return;
+    const rect = minimap.getBoundingClientRect();
+    const frac = (e.clientY - rect.top) / rect.height;
+    const { t0, span } = timelineBounds();
+    const targetT = t0 + frac * span;
+    let idx = 0;
+    for (let i = 0; i < segments.length; i++) {
+      if (segments[i].start <= targetT) idx = i; else break;
+    }
+    select(idx, true, false);
+  }
+  mmColors.addEventListener("click", minimapClick);
+  mmCtrl.addEventListener("click", minimapClick);
+
+  segList.addEventListener("scroll", updateMinimapViewport);
+  window.addEventListener("resize", () => { updateMinimapViewport(); });
+
   function tagSegment(i, sp) {
-    if (i < 0 || i >= segments.length) return;
-    segments[i].speaker = sp; segments[i].turnStart = false; refreshClasses();
+    const r = selRange();
+    if (!r) return;
+    if (r.lo === r.hi) {
+      // un seul segment
+      segments[i].speaker = sp; segments[i].turnStart = false;
+    } else {
+      // plage : meme locuteur, turnStart sur le 1er seulement
+      for (let j = r.lo; j <= r.hi; j++) {
+        segments[j].speaker = sp;
+        segments[j].turnStart = (j === r.lo);
+      }
+    }
+    refreshClasses();
   }
   function tagTurn(i, sp) {
-    if (i < 0 || i >= segments.length) return;
+    const r = selRange();
+    if (!r) return;
+    if (r.lo !== r.hi) {
+      // plage explicite : on tague la plage comme une prise de parole
+      for (let j = r.lo; j <= r.hi; j++) {
+        segments[j].speaker = sp;
+        segments[j].turnStart = (j === r.lo);
+      }
+      refreshClasses();
+      return;
+    }
+    // comportement d'origine : ce segment + suivants jusqu'au prochain turnStart
     segments[i].speaker = sp; segments[i].turnStart = true;
     for (let j = i + 1; j < segments.length; j++) {
       if (segments[j].turnStart) break;
@@ -450,11 +676,26 @@
     refreshClasses();
   }
   function clearSegment(i) {
-    if (i < 0 || i >= segments.length) return;
-    segments[i].speaker = null; segments[i].turnStart = false; refreshClasses();
+    const r = selRange();
+    if (!r) return;
+    for (let j = r.lo; j <= r.hi; j++) {
+      segments[j].speaker = null; segments[j].turnStart = false;
+    }
+    refreshClasses();
   }
-  function select(i, seek) {
+  function toggleCut() {
+    const r = selRange();
+    if (!r) return;
+    // Si tous les segments de la plage sont deja coupes -> on retablit ; sinon on coupe tout.
+    let allCut = true;
+    for (let j = r.lo; j <= r.hi; j++) { if (!segments[j].cut) { allCut = false; break; } }
+    const newVal = !allCut;
+    for (let j = r.lo; j <= r.hi; j++) segments[j].cut = newVal;
+    refreshClasses();
+  }
+  function select(i, seek, extend) {
     if (i < 0 || i >= segments.length) return;
+    if (!extend) selAnchor = i;   // selection simple : l'ancre suit
     selected = i; refreshClasses();
     const node = segList.querySelector(`.seg[data-i="${i}"]`);
     if (node) node.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -480,12 +721,86 @@
       }
       lastPlaying = cur;
     }
+    updateMinimapPlayhead();
   });
 
   segList.addEventListener("click", (e) => {
     const seg = e.target.closest(".seg");
     if (!seg) return;
-    select(+seg.dataset.i, true);
+    if (e.target.closest(".text-edit")) return;
+    const i = +seg.dataset.i;
+    if (e.shiftKey) { select(i, false, true); }   // Maj+clic : etend la plage
+    else { select(i, true, false); }
+  });
+
+  // ---- Edition inline du texte (double-clic) ----
+  function startEdit(i) {
+    if (i < 0 || i >= segments.length) return;
+    const node = segList.querySelector(`.seg[data-i="${i}"]`);
+    if (!node) return;
+    const textEl = node.querySelector(".text");
+    if (!textEl || textEl.querySelector(".text-edit")) return; // deja en edition
+
+    const original = segments[i].text;
+    const ta = document.createElement("textarea");
+    ta.className = "text-edit";
+    ta.value = original;
+    textEl.innerHTML = "";
+    textEl.appendChild(ta);
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) {
+        const v = ta.value.trim();
+        if (v !== original) {
+          segments[i].text = v;
+          segments[i].edited = true;
+        }
+      }
+      // Re-render de ce segment uniquement
+      renderOneText(i);
+    };
+    ta.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); commit(true); }
+      else if (ev.key === "Escape") { ev.preventDefault(); commit(false); }
+    });
+    ta.addEventListener("blur", () => commit(true));
+  }
+
+  // Re-rend le contenu texte d'un seul segment (badge + texte + indice)
+  function renderOneText(i) {
+    const node = segList.querySelector(`.seg[data-i="${i}"]`);
+    if (!node) return;
+    const seg = segments[i];
+    node.classList.toggle("edited", !!seg.edited);
+    const textEl = node.querySelector(".text");
+    textEl.innerHTML = "";
+    if (seg.turnStart && seg.speaker !== null) {
+      const badge = document.createElement("span");
+      badge.className = "turn-badge";
+      badge.style.color = locVar(seg.speaker);
+      badge.style.border = `1px solid ${locVar(seg.speaker)}`;
+      badge.textContent = "▸ " + names[seg.speaker];
+      textEl.appendChild(badge);
+    }
+    textEl.appendChild(document.createTextNode(seg.text));
+    const hint = document.createElement("span");
+    hint.className = "edit-hint";
+    hint.textContent = "double-clic pour éditer";
+    textEl.appendChild(hint);
+  }
+
+  segList.addEventListener("dblclick", (e) => {
+    const seg = e.target.closest(".seg");
+    if (!seg) return;
+    const textEl = e.target.closest(".text");
+    if (!textEl) return;
+    e.preventDefault();
+    startEdit(+seg.dataset.i);
   });
 
   document.querySelector(".tag-controls").addEventListener("click", (e) => {
@@ -493,11 +808,15 @@
     if (!btn) return;
     const action = btn.dataset.action;
     if (action === "clear") { if (selected >= 0) clearSegment(selected); return; }
+    if (action === "cut") { if (selected >= 0) toggleCut(); return; }
     if (selected < 0) return;
     const loc = +btn.dataset.loc;
+    const r = selRange();
+    const wasRange = r && r.lo !== r.hi;
     if (action === "tag") {
       tagSegment(selected, loc);
-      if (selected < segments.length - 1) select(selected + 1, false);
+      if (wasRange) { selAnchor = r.hi; select(Math.min(r.hi + 1, segments.length - 1), false, false); }
+      else if (selected < segments.length - 1) select(selected + 1, false, false);
     } else if (action === "turn") {
       tagTurn(selected, loc);
     }
@@ -507,17 +826,38 @@
     if (e.target.matches("input, select, textarea")) return;
     if (segments.length === 0) return;
     if (e.code === "Space") { e.preventDefault(); player.paused ? player.play() : player.pause(); return; }
-    if (e.key === "ArrowDown") { e.preventDefault(); select(Math.min(selected + 1, segments.length - 1), false); return; }
-    if (e.key === "ArrowUp")   { e.preventDefault(); select(Math.max(selected - 1, 0), false); return; }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const ni = Math.min(selected + 1, segments.length - 1);
+      select(ni, false, e.shiftKey);   // Maj : etend la plage
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const ni = Math.max(selected - 1, 0);
+      select(ni, false, e.shiftKey);
+      return;
+    }
     if (e.key === "ArrowRight"){ e.preventDefault(); player.currentTime = Math.min(player.currentTime + 3, player.duration || 1e9); return; }
     if (e.key === "ArrowLeft") { e.preventDefault(); player.currentTime = Math.max(player.currentTime - 3, 0); return; }
     if (e.key === "Enter")     { e.preventDefault(); if (selected >= 0) { player.currentTime = segments[selected].start; player.play(); } return; }
     if (selected < 0) return;
     if (e.key === "0") { clearSegment(selected); return; }
+    if (e.key === "c" || e.key === "C") { toggleCut(); return; }
     const num = parseInt(e.key, 10);
     if (!isNaN(num) && num >= 1 && num <= nSpeakers) {
+      const r = selRange();
+      const wasRange = r && r.lo !== r.hi;
       if (e.shiftKey) { tagTurn(selected, num - 1); }
-      else { tagSegment(selected, num - 1); if (selected < segments.length - 1) select(selected + 1, false); }
+      else { tagSegment(selected, num - 1); }
+      if (wasRange) {
+        // apres avoir tague une plage, on se place a la fin de la plage et on reduit la selection
+        const end = r.hi;
+        selAnchor = end;
+        select(Math.min(end + 1, segments.length - 1), false, false);
+      } else if (!e.shiftKey && selected < segments.length - 1) {
+        select(selected + 1, false, false);
+      }
     }
   });
 
@@ -542,8 +882,10 @@
     render();
   });
 
+  let audioFileName = null;
   document.getElementById("audioFile").addEventListener("change", (e) => {
     const f = e.target.files[0]; if (!f) return;
+    audioFileName = f.name;
     player.src = URL.createObjectURL(f);
   });
   // Detecte si les etiquettes sont LOCALES par troncon (format T{n}-{lettre})
@@ -623,10 +965,61 @@
   }
   function speakerName(s) { return (s === null || s >= nSpeakers) ? "NON_AFFECTE" : names[s]; }
 
+  // Reconstruit la timeline sans les segments coupes.
+  // - kept : segments conserves, temps recales (decales de la duree coupee qui precede).
+  // - keepIntervals : morceaux d'audio ORIGINAL a garder = complement des intervalles coupes.
+  //   On raisonne sur les bornes de coupe (pas segment par segment) pour ne PAS
+  //   supprimer les silences entre deux segments conserves -> synchro preservee.
+  function buildCompactTimeline() {
+    if (segments.length === 0) return { kept: [], keepIntervals: [], cutIntervals: [] };
+
+    // 1. Intervalles coupes (temps original), fusionnes si adjacents/chevauchants.
+    const rawCuts = segments.filter(s => s.cut).map(s => ({ start: s.start, end: s.end }));
+    rawCuts.sort((a, b) => a.start - b.start);
+    const cutIntervals = [];
+    for (const c of rawCuts) {
+      const last = cutIntervals[cutIntervals.length - 1];
+      if (last && c.start <= last.end + 1e-6) { last.end = Math.max(last.end, c.end); }
+      else cutIntervals.push({ start: c.start, end: c.end });
+    }
+
+    // 2. Recalage des segments conserves : decalage = somme des coupes qui finissent avant le segment.
+    const kept = [];
+    for (const seg of segments) {
+      if (seg.cut) continue;
+      let shift = 0;
+      for (const c of cutIntervals) {
+        if (c.end <= seg.start + 1e-6) shift += (c.end - c.start);
+        else break;
+      }
+      kept.push({
+        start: seg.start - shift,
+        end: seg.end - shift,
+        text: seg.text,
+        speaker: seg.speaker,
+        turnStart: seg.turnStart
+      });
+    }
+
+    // 3. keepIntervals = complement des coupes sur [0, fin de l'audio].
+    const audioEnd = segments[segments.length - 1].end;
+    const keepIntervals = [];
+    let cursor = 0;
+    for (const c of cutIntervals) {
+      if (c.start > cursor + 1e-6) keepIntervals.push({ start: cursor, end: c.start });
+      cursor = Math.max(cursor, c.end);
+    }
+    if (cursor < audioEnd - 1e-6) keepIntervals.push({ start: cursor, end: audioEnd });
+
+    return { kept, keepIntervals, cutIntervals };
+  }
+
   document.getElementById("exportTxt").addEventListener("click", () => {
     if (segments.length === 0) return;
+    const { kept } = buildCompactTimeline();
+    if (kept.length === 0) { alert("Tous les segments sont coupés : rien à exporter."); return; }
     let out = "", cur;
-    for (const seg of segments) {
+    for (const seg of kept) {
       if (seg.speaker !== cur) { out += `\n[${speakerName(seg.speaker)}] (${fmt(seg.start)})\n`; cur = seg.speaker; }
       out += seg.text + " ";
     }
@@ -641,11 +1034,36 @@
   }
   document.getElementById("exportSrt").addEventListener("click", () => {
     if (segments.length === 0) return;
+    const { kept } = buildCompactTimeline();
+    if (kept.length === 0) { alert("Tous les segments sont coupés : rien à exporter."); return; }
     let out = "";
-    segments.forEach((seg, i) => {
+    kept.forEach((seg, i) => {
       out += `${i + 1}\n${srtTime(seg.start)} --> ${srtTime(seg.end)}\n[${speakerName(seg.speaker)}] ${seg.text}\n\n`;
     });
     download("transcription_taggee.srt", out);
+  });
+
+  // Export du plan de coupe (JSON) : source de verite pour couper_audio.py
+  document.getElementById("exportCut").addEventListener("click", () => {
+    if (segments.length === 0) return;
+    const { keepIntervals, cutIntervals } = buildCompactTimeline();
+    if (cutIntervals.length === 0) {
+      if (!confirm("Aucun segment marqué « à couper ». Exporter quand même un plan qui garde tout l'audio ?")) return;
+    }
+    const keptDur = keepIntervals.reduce((a, i) => a + (i.end - i.start), 0);
+    const cutDur = cutIntervals.reduce((a, i) => a + (i.end - i.start), 0);
+    const plan = {
+      version: 1,
+      generated_by: "tagger.html",
+      generated_at: new Date().toISOString(),
+      audio_source: audioFileName || null,
+      reencode: true,                 // precis au ms (recommande) ; couper_audio.py respecte ce choix
+      keep_intervals: keepIntervals.map(i => ({ start: +i.start.toFixed(3), end: +i.end.toFixed(3) })),
+      cut_intervals: cutIntervals.map(i => ({ start: +i.start.toFixed(3), end: +i.end.toFixed(3) })),
+      kept_duration_sec: +keptDur.toFixed(3),
+      cut_duration_sec: +cutDur.toFixed(3)
+    };
+    download("plan_de_coupe.json", JSON.stringify(plan, null, 2));
   });
 
   document.getElementById("helpToggle").addEventListener("click", () => {

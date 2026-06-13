@@ -14,7 +14,8 @@ modèles WhisperX/pyannote).
 |---------|------|
 | `transcribe.py` | Transcription simple → `.txt`, `.srt`, `.json` (audios courts) |
 | `transcribe_robuste.py` | Transcription d'audios **longs** : tronçons + reprise sur interruption |
-| `tagger.html`   | Lecteur audio + transcription synchronisée + tagging des locuteurs |
+| `tagger.html`   | Lecteur audio + transcription synchronisée + tagging des locuteurs + **édition du texte** + **coupe de passages** |
+| `couper_audio.py` | Reconstruit l'audio **raccourci** à partir du plan de coupe exporté par le tagueur (ffmpeg) |
 
 ---
 
@@ -141,6 +142,77 @@ Les touches actives dépendent du nombre de locuteurs choisi (1-2, 1-3 ou 1-4).
 Bouton « Renommer les locuteurs » : demande successivement le nom de chaque
 locuteur actif (ex. « Intervieweur », « Candidat ») ; ces noms apparaissent dans
 les exports.
+
+---
+
+## 2 bis. Édition du texte et coupe de passages (tagueur)
+
+Le tagueur permet, au-delà du tagging des locuteurs :
+
+### Éditer le texte d'un segment
+**Double-clic** sur le texte d'un segment ouvre un champ éditable (corriger une
+faute de transcription). `Entrée` valide, `Maj+Entrée` insère un retour à la
+ligne, `Échap` annule. Les segments modifiés portent un petit anneau autour de
+leur marqueur. Les corrections sont reprises dans les exports `.txt` / `.srt`.
+
+### Sélection multiple
+`Maj+↑` / `Maj+↓` (ou `Maj+clic`) étend la sélection à une plage de segments.
+Une touche locuteur (`1`–`4`) tague alors **toute la plage** d'un coup.
+
+### Couper un passage (hors-périmètre)
+Pour retirer un passage de l'entretien (digression, hors-sujet) :
+
+1. Sélectionner le(s) segment(s) (un seul, ou une plage avec `Maj+flèche`).
+2. Cliquer **✂ Couper** (ou touche `C`). Les segments coupés apparaissent
+   barrés/grisés dans la liste et en rouge dans la minimap. **C'est réversible** :
+   re-presser `C` rétablit. Rien n'est détruit tant qu'on n'exporte pas.
+3. Le compteur « ✂ Coupé » en haut indique le nombre de segments et la durée.
+
+Quand le montage est terminé, **trois exports** :
+- **Exporter .txt** / **Exporter .srt** : transcription **raccourcie**, avec la
+  timeline **recalée** (segments coupés retirés, timestamps suivants décalés).
+- **Exporter plan de coupe** : un fichier `plan_de_coupe.json` décrivant les
+  intervalles audio à conserver. C'est l'entrée de `couper_audio.py` (ci-dessous).
+
+> Modèle « montage vidéo » : on édite et on marque les coupes de façon
+> non-destructive, puis on exporte une seule fois pour produire les fichiers
+> raccourcis. Les fichiers d'origine ne sont jamais modifiés.
+
+---
+
+## 2 ter. Reconstruire l'audio coupé (`couper_audio.py`)
+
+Le tagueur ne peut pas raccourcir l'audio lui-même (navigateur). Il exporte un
+**plan de coupe** ; ce script applique la coupe sur l'audio via ffmpeg.
+
+### Utilisation
+```powershell
+python tools\transcription\couper_audio.py plan_de_coupe.json
+```
+- Sans `--audio` : l'audio est pris dans le champ `audio_source` du plan
+  (cherché dans le dossier courant, puis à côté du plan).
+- Sans `--output` : écrit `<nom>_coupe<ext>` à côté de l'audio source.
+
+Options :
+```
+--audio    Chemin de l'audio source (sinon pris dans le plan)
+--output   Fichier de sortie (sinon <nom>_coupe<ext>)
+--copy     Coupe en copie de flux (rapide mais IMPRECIS) — déconseillé
+```
+
+### Précision de la coupe
+Par défaut le script **réencode** l'audio : la coupe est précise à la
+milliseconde et **ne dérive pas**, quel que soit le nombre de coupes (l'écart
+constaté est un offset de conteneur de l'ordre de ~20 ms, **non cumulatif**).
+L'option `--copy` (copie de flux) est plus rapide mais coupe aux keyframes du
+fichier compressé : elle peut désynchroniser et n'est pas recommandée.
+
+### Résultat
+Un nouvel audio raccourci, **parfaitement synchronisé** avec les `.srt` / `.txt`
+exportés par le tagueur (mêmes intervalles). L'original n'est jamais modifié.
+
+### Prérequis
+ffmpeg dans le PATH (déjà installé par `bootstrap/setup-windows.ps1`).
 
 ---
 
