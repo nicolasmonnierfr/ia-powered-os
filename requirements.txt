@@ -10,5 +10,13 @@
 whisperx
 python-dotenv
 
+# === Anonymisation (tools/anonymisation) ===
+# Détection d'entités en local (NER) + remplacement par pseudonymes.
+presidio-analyzer
+presidio-anonymizer
+pyyaml
+# Le modèle spaCy FR (fr_core_news_md) est installé séparément par le
+# script bootstrap (ce n'est pas un paquet PyPI standard).
+
 # torch / torchaudio sont installés séparément par le script bootstrap
 # (index CPU dédié) pour éviter de tirer les paquets CUDA.

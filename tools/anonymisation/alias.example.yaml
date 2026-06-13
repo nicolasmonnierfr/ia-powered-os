@@ -1,0 +1,58 @@
+# =============================================================================
+#  alias.example.yaml — Modèle de configuration d'anonymisation
+#
+#  Copie ce fichier (ex. "alias_acme.yaml") et adapte-le AVANT de lancer
+#  l'anonymisation d'un transcript. Tout ce qui est déclaré ici a PRIORITÉ
+#  sur la détection automatique (Presidio).
+#
+#  Rappel : ce fichier reste sur ton poste. Il ne part jamais avec le
+#  transcript anonymisé.
+# =============================================================================
+
+# --- 1. Termes à FORCER (priorité absolue sur le NER) -------------------------
+# Utile pour ce que le modèle ne détecte pas : noms de produits, de projets,
+# surnoms, jargon interne. Regroupe ici toutes les variantes d'une même entité
+# sous un seul pseudonyme : c'est ainsi qu'on dit "Thomas et Tom = la même
+# personne".
+#
+# Pseudonymes typés disponibles : PERSONNE_n, LIEU_n, ORG_n, PRODUIT_n,
+# EMAIL_n, TEL_n. Tu peux numéroter librement (le pipeline évite les collisions).
+forcer:
+  PRODUIT_1:
+    - "Projet Hélios"
+    - "Hélios"
+  PERSONNE_1:
+    - "Thomas"
+    - "Tom"            # surnom de la même personne -> même pseudo
+  ORG_1:
+    - "Acme Corporation"
+    - "Acme"
+
+# --- 2. Termes à IGNORER (jamais anonymiser) ---------------------------------
+# Faux positifs récurrents du NER (formules de politesse prises pour des noms,
+# mots métiers, etc.). Insensible à la casse.
+ignorer:
+  - "Bonjour"
+  - "Merci"
+  - "Madame"
+  - "Monsieur"
+
+# --- 3. Étiquettes de locuteurs GÉNÉRIQUES à conserver telles quelles --------
+# Si une étiquette [Locuteur] est générique (rôle, pas un nom réel), on la
+# garde intacte. Les étiquettes qui sont de vrais noms seront, elles,
+# anonymisées comme le reste (et avec le même pseudo que dans le corps du texte).
+locuteurs_generiques:
+  - "Interviewer"
+  - "Intervieweur"
+  - "Candidat"
+  - "Candidate"
+  - "Consultant"
+  - "Client"
+
+# --- 4. Réglages de détection (optionnel) ------------------------------------
+reglages:
+  # Score minimal pour retenir une détection automatique (0..1).
+  # Plus haut = moins de faux positifs mais plus d'oublis. 0.5 est un bon départ.
+  seuil_score: 0.5
+  # Types d'entités à détecter automatiquement.
+  types: ["PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS", "PHONE_NUMBER"]

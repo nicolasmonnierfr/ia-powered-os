@@ -21,7 +21,8 @@ cd IA-Powered-OS
 IA-Powered-OS/
 ├── bootstrap/        Scripts d'installation (prérequis système, venv)
 ├── tools/            Outils métier exécutables
-│   └── transcription/  Transcription d'entretiens (WhisperX) + tagueur
+│   ├── transcription/  Transcription d'entretiens (WhisperX) + tagueur
+│   └── anonymisation/  Anonymisation locale des transcripts (Presidio)
 ├── scripts/          Glue technique, lanceurs, utilitaires courts
 ├── config/           Modèles de configuration (.env.example)
 ├── data/             Données locales (gitignoré : intermédiaires .chunks/)
@@ -45,6 +46,7 @@ IA-Powered-OS/
 | Outil | Description | État |
 |-------|-------------|------|
 | `tools/transcription` | Transcription + diarisation d'entretiens (WhisperX, local) + tagueur | En cours |
+| `tools/anonymisation` | Anonymisation locale des transcripts (Presidio/spaCy FR) avec pseudonymes cohérents et table de correspondance réutilisable | En cours |
 
 > L'orchestration par Claude Code (pilotage automatique du pipeline) sera
 > ajoutée ultérieurement, sous `.claude/skills/`.

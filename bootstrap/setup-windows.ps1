@@ -67,6 +67,16 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 Write-Host "`n[4/4] Installation de whisperx et dependances..." -ForegroundColor Yellow
 pip install -r requirements.txt
 
+# --- 4 bis. Modele spaCy FR (anonymisation) ---
+Write-Host "`n[4bis/4] Installation du modele spaCy francais (anonymisation)..." -ForegroundColor Yellow
+# Le modele n'est pas un paquet PyPI : on l'installe par son wheel officiel.
+# (fr_core_news_md ~46 Mo ; basculer sur _lg pour plus de precision si besoin.)
+python -m spacy download fr_core_news_md
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  Fallback : installation directe du wheel du modele..." -ForegroundColor Gray
+    pip install "https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl"
+}
+
 # --- Config .env ---
 if (-not (Test-Path ".\config\.env")) {
     Copy-Item ".\config\.env.example" ".\config\.env"
