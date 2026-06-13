@@ -24,14 +24,13 @@ IA-Powered-OS/
 │   └── transcription/  Transcription d'entretiens (WhisperX) + tagueur
 ├── scripts/          Glue technique, lanceurs, utilitaires courts
 ├── config/           Modèles de configuration (.env.example)
-├── data/             Données locales (gitignoré : audios, transcriptions)
-├── .claude/skills/   Pilotage par Claude Code (orchestration du pipeline)
+├── data/             Données locales (gitignoré : intermédiaires .chunks/)
 └── requirements.txt  Dépendances Python
 ```
 
-> Note : `tools/` contient **tes** outils métier. `.claude/skills/` est
-> l'emplacement où **Claude Code** découvre ses skills (vocabulaire imposé par
-> l'outil) — ce sont des instructions de pilotage qui appellent tes outils.
+> Note : `tools/` contient **tes** outils métier exécutables. Les outils
+> s'appellent depuis le dossier d'une mission (le répertoire courant) : les
+> livrables y sont écrits, les intermédiaires restent dans `data/.chunks/`.
 
 ## Règles d'or
 
@@ -47,11 +46,8 @@ IA-Powered-OS/
 |-------|-------------|------|
 | `tools/transcription` | Transcription + diarisation d'entretiens (WhisperX, local) + tagueur | En cours |
 
-## Pilotage (Claude Code)
-
-| Skill Claude Code | Rôle |
-|-------------------|------|
-| `orchestration-entretiens` | Découvre, lance, suit et range le pipeline de transcription |
+> L'orchestration par Claude Code (pilotage automatique du pipeline) sera
+> ajoutée ultérieurement, sous `.claude/skills/`.
 
 ## Plateforme
 

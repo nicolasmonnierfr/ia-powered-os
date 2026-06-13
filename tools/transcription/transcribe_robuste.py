@@ -2,28 +2,38 @@
 """
 transcribe_robuste.py — Transcription d'audios longs, resistante aux interruptions.
 
+S'appelle DEPUIS LE DOSSIER D'UNE MISSION (le repertoire courant) :
+  - les livrables (<nom>.txt, <nom>.srt) sont ecrits dans ce repertoire ;
+  - les intermediaires (troncons + <nom>.json complet) vont cote IA-Powered-OS,
+    dans data/.chunks/AAAAMMJJ-<nom>/ (localise via la variable d'environnement
+    IA_POWERED_OS_HOME, avec repli sur l'emplacement du script).
+
 Strategie :
   1. Decoupe l'audio en troncons de N minutes (ffmpeg), avec un leger chevauchement.
   2. Transcrit chaque troncon separement ; le resultat est ecrit sur disque
-     IMMEDIATEMENT apres chaque troncon.
+     IMMEDIATEMENT apres chaque troncon (point de reprise).
   3. Reprise : au demarrage, saute les troncons deja transcrits.
-  4. Fusion : recolle les troncons en decalant les timestamps, produit
-     <nom>.txt / <nom>.srt / <nom>.json finaux.
+  4. Fusion : recolle les troncons en decalant les timestamps.
 
-La diarisation N'EST PAS faite ici (pyannote n'est pas coherent entre fichiers
-separes). Le decoupage produit une transcription SANS locuteurs ; l'attribution
-se fait ensuite dans le tagueur (tagger.html).
+Diarisation (option --diarize) : chaque troncon est diarise independamment et
+ses locuteurs sont nommes LOCALEMENT (T1-A, T2-B...). La reconciliation entre
+troncons se fait ensuite dans le tagueur (tagger.html).
 
-Usage :
-    python tools/transcription/transcribe_robuste.py "data/entretien_1h30.m4a"
+Usage (depuis le dossier de mission) :
+    # tous les audios du repertoire courant
+    python <repo>/tools/transcription/transcribe_robuste.py --diarize
+    # un seul fichier
+    python <repo>/tools/transcription/transcribe_robuste.py "entretien.m4a" --diarize
 
 Options :
-    --chunk-min    Duree d'un troncon en minutes (defaut 15)
-    --overlap-sec  Chevauchement entre troncons en secondes (defaut 2)
+    audio          Fichier a traiter (optionnel ; si omis : tous les audios du
+                   repertoire courant)
+    --chunk-min    Duree d'un troncon en minutes (defaut 15, entier)
+    --overlap-sec  Chevauchement entre troncons en secondes (defaut 2 ;
+                   porte a 5 si --diarize)
     --model        Modele Whisper (defaut large-v3)
     --language     Langue (defaut fr)
-    --work-dir     Dossier de travail des troncons (defaut data/.chunks/<nom>)
-    --output-dir   Dossier de sortie final (defaut data/transcriptions)
+    --diarize      Diarisation par troncon (etiquettes locales a reconcilier)
 
 Le script est relancable a l'identique : il reprend ou il s'etait arrete.
 """
@@ -242,18 +252,15 @@ def merge_chunks(work_dir, n_chunks, overlap_sec):
     return all_segs
 
 
-def write_outputs(segments, out_dir, stem, audio_name, model, language):
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # JSON
-    (out_dir / f"{stem}.json").write_text(
-        json.dumps({"segments": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
+def write_deliverables(segments, deliver_dir, stem, audio_name, model, language):
+    """Ecrit les LIVRABLES (.txt et .srt) dans deliver_dir (repertoire de mission)."""
+    deliver_dir.mkdir(parents=True, exist_ok=True)
     # TXT
     txt = [f"# Transcription : {audio_name}", f"# Langue : {language} | Modele : {model}", ""]
     for s in segments:
         txt.append(f"({fmt_hms(s['start'])}) {s['text']}")
-    (out_dir / f"{stem}.txt").write_text("\n".join(txt) + "\n", encoding="utf-8")
+    (deliver_dir / f"{stem}.txt").write_text("\n".join(txt) + "\n", encoding="utf-8")
     # SRT : prefixe l'etiquette locale [T{n}-X] si la diarisation par troncon a tourne.
-    # Ces etiquettes locales sont a reconcilier dans le tagueur.
     srt = []
     for i, s in enumerate(segments, 1):
         if not s["text"]:
@@ -262,55 +269,68 @@ def write_outputs(segments, out_dir, stem, audio_name, model, language):
         local = s.get("local")
         prefix = f"[{local}] " if local else ""
         srt.append(f"{i}\n{fmt_srt(s['start'])} --> {fmt_srt(end)}\n{prefix}{s['text']}\n")
-    (out_dir / f"{stem}.srt").write_text("\n".join(srt) + "\n", encoding="utf-8")
+    (deliver_dir / f"{stem}.srt").write_text("\n".join(srt) + "\n", encoding="utf-8")
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Transcription robuste (troncons + reprise).")
-    ap.add_argument("audio")
-    ap.add_argument("--chunk-min", type=int, default=15)
-    ap.add_argument("--overlap-sec", type=float, default=2.0)
-    ap.add_argument("--model", default=os.getenv("WHISPER_MODEL", "large-v3"))
-    ap.add_argument("--language", default=os.getenv("WHISPER_LANGUAGE", "fr"))
-    ap.add_argument("--device", default=os.getenv("WHISPER_DEVICE", "cpu"))
-    ap.add_argument("--compute-type", default=os.getenv("WHISPER_COMPUTE_TYPE", "int8"))
-    ap.add_argument("--work-dir", default=None)
-    ap.add_argument("--output-dir", default="data/transcriptions")
-    ap.add_argument("--diarize", action="store_true",
-                    help="Diarisation par troncon avec etiquettes locales a reconcilier dans le tagueur")
-    args = ap.parse_args()
+def write_json(segments, work_dir, stem):
+    """Ecrit le JSON complet (intermediaire) dans work_dir (cote IA-Powered-OS)."""
+    work_dir.mkdir(parents=True, exist_ok=True)
+    (work_dir / f"{stem}.json").write_text(
+        json.dumps({"segments": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    load_config()
 
-    # Avec diarisation, un chevauchement plus large fiabilise la reconciliation aux jointures.
-    if args.diarize and args.overlap_sec < 5.0:
-        args.overlap_sec = 5.0
-        print("[INFO] Diarisation activee : chevauchement porte a 5s pour la reconciliation.")
+AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac", ".ogg", ".aac", ".wma", ".opus"}
 
-    hf_token = os.getenv("HUGGINGFACE_TOKEN", "").strip()
-    if args.diarize:
-        if not hf_token or hf_token.startswith("hf_xxxx"):
-            print("[ERREUR] --diarize requiert un HUGGINGFACE_TOKEN valide dans config/.env.", file=sys.stderr)
+
+def resolve_repo_home():
+    """
+    Localise IA-Powered-OS. Priorite : variable d'environnement IA_POWERED_OS_HOME.
+    Repli : on deduit le repo depuis l'emplacement de ce script (il vit dans le repo),
+    avec un avertissement.
+    """
+    env = os.getenv("IA_POWERED_OS_HOME", "").strip()
+    if env:
+        p = Path(env).expanduser()
+        if p.is_dir():
+            return p, True
+        print(f"[AVERTISSEMENT] IA_POWERED_OS_HOME={env} n'est pas un dossier valide ; "
+              f"repli sur l'emplacement du script.")
+    # Repli : ce fichier est dans <repo>/tools/transcription/, le repo est 2 niveaux au-dessus
+    fallback = Path(__file__).resolve().parents[2]
+    if not env:
+        print(f"[AVERTISSEMENT] IA_POWERED_OS_HOME non definie ; repli sur {fallback}")
+        print("              (definir la variable evite toute ambiguite ; voir le README)")
+    return fallback, False
+
+
+def find_audios(directory, explicit_name=None):
+    """Renvoie la liste des audios a traiter dans 'directory'."""
+    if explicit_name:
+        p = (directory / explicit_name) if not Path(explicit_name).is_absolute() else Path(explicit_name)
+        if not p.exists():
+            print(f"[ERREUR] Fichier introuvable : {p}", file=sys.stderr)
             sys.exit(1)
+        return [p]
+    audios = sorted(
+        f for f in directory.iterdir()
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTS
+    )
+    return audios
 
-    audio_path = Path(args.audio)
-    if not audio_path.exists():
-        print(f"[ERREUR] Fichier introuvable : {audio_path}", file=sys.stderr)
-        sys.exit(1)
 
+def process_one(audio_path, deliver_dir, repo_home, args, hf_token, el):
+    """Traite un audio : decoupe, transcription par troncon (reprise), fusion, livrables."""
     stem = audio_path.stem
-    work_dir = Path(args.work_dir) if args.work_dir else Path("data/.chunks") / stem
-    out_dir = Path(args.output_dir)
+    # Dossier intermediaire date, cote repo, isole par fichier pour eviter les collisions
+    today = time.strftime("%Y%m%d")
+    work_dir = repo_home / "data" / ".chunks" / f"{today}-{stem}"
 
-    t0 = time.time()
-    def el(): return f"[{time.time()-t0:7.1f}s]"
-
-    print(f"{el()} Audio : {audio_path.name}")
+    print(f"{el()} === Audio : {audio_path.name} ===")
+    print(f"{el()} Intermediaires : {work_dir}")
     print(f"{el()} Decoupage en troncons de {args.chunk_min} min (chevauchement {args.overlap_sec}s)...")
     chunks, duration = split_audio(audio_path, work_dir, args.chunk_min, args.overlap_sec)
     print(f"{el()} Duree totale : {fmt_hms(duration)} -> {len(chunks)} troncon(s)")
 
-    # Transcription troncon par troncon, avec reprise
     done = 0
     for (idx, chunk_path, offset, ov) in chunks:
         meta_path = work_dir / f"chunk_{idx:03d}.json"
@@ -322,7 +342,6 @@ def main():
         segs = transcribe_chunk(chunk_path, args.model, args.language,
                                 args.device, args.compute_type,
                                 diarize=args.diarize, hf_token=hf_token, idx=idx)
-        # Ecriture IMMEDIATE du resultat du troncon (point de reprise)
         meta_path.write_text(json.dumps({
             "index": idx, "offset": offset, "overlap": ov, "segments": segs,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -331,17 +350,80 @@ def main():
 
     if done != len(chunks):
         print(f"{el()} [ERREUR] Tous les troncons ne sont pas faits ({done}/{len(chunks)}).")
-        sys.exit(2)
+        return False
 
     print(f"{el()} Fusion des {len(chunks)} troncons...")
     merged = merge_chunks(work_dir, len(chunks), args.overlap_sec)
-    write_outputs(merged, out_dir, stem, audio_path.name, args.model, args.language)
+    # Livrables -> repertoire de mission ; JSON complet -> intermediaire (repo)
+    write_deliverables(merged, deliver_dir, stem, audio_path.name, args.model, args.language)
+    write_json(merged, work_dir, stem)
 
     print(f"{el()} Termine. {len(merged)} segments fusionnes.")
-    print(f"  -> {out_dir / (stem + '.txt')}")
-    print(f"  -> {out_dir / (stem + '.srt')}")
-    print(f"  -> {out_dir / (stem + '.json')}")
-    print(f"  (troncons conserves dans {work_dir} ; supprimables une fois le resultat verifie)")
+    print(f"  -> {deliver_dir / (stem + '.txt')}")
+    print(f"  -> {deliver_dir / (stem + '.srt')}")
+    print(f"  (JSON complet et troncons dans {work_dir})")
+    return True
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Transcription robuste (troncons + reprise). "
+                    "Livrables .srt/.txt dans le repertoire courant ; intermediaires dans IA-Powered-OS.")
+    ap.add_argument("audio", nargs="?", default=None,
+                    help="Fichier audio a traiter. Si omis : tous les audios du repertoire courant.")
+    ap.add_argument("--chunk-min", type=int, default=15)
+    ap.add_argument("--overlap-sec", type=float, default=2.0)
+    ap.add_argument("--model", default=os.getenv("WHISPER_MODEL", "large-v3"))
+    ap.add_argument("--language", default=os.getenv("WHISPER_LANGUAGE", "fr"))
+    ap.add_argument("--device", default=os.getenv("WHISPER_DEVICE", "cpu"))
+    ap.add_argument("--compute-type", default=os.getenv("WHISPER_COMPUTE_TYPE", "int8"))
+    ap.add_argument("--diarize", action="store_true",
+                    help="Diarisation par troncon avec etiquettes locales a reconcilier dans le tagueur")
+    args = ap.parse_args()
+
+    # Charger config/.env depuis le repo (pas depuis le repertoire de mission)
+    repo_home, _ = resolve_repo_home()
+    env_path = repo_home / "config" / ".env"
+    if env_path.exists():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+        except ImportError:
+            pass
+
+    if args.diarize and args.overlap_sec < 5.0:
+        args.overlap_sec = 5.0
+        print("[INFO] Diarisation activee : chevauchement porte a 5s pour la reconciliation.")
+
+    hf_token = os.getenv("HUGGINGFACE_TOKEN", "").strip()
+    if args.diarize and (not hf_token or hf_token.startswith("hf_xxxx")):
+        print("[ERREUR] --diarize requiert un HUGGINGFACE_TOKEN valide dans config/.env.", file=sys.stderr)
+        sys.exit(1)
+
+    # Repertoire de mission = repertoire courant (la ou l'utilisateur a lance le script)
+    deliver_dir = Path.cwd()
+    audios = find_audios(deliver_dir, args.audio)
+    if not audios:
+        print(f"[INFO] Aucun audio trouve dans {deliver_dir}")
+        print(f"       Extensions reconnues : {', '.join(sorted(AUDIO_EXTS))}")
+        sys.exit(0)
+
+    t0 = time.time()
+    def el(): return f"[{time.time()-t0:7.1f}s]"
+
+    print(f"{el()} Repertoire de mission : {deliver_dir}")
+    print(f"{el()} {len(audios)} audio(s) a traiter : {', '.join(a.name for a in audios)}")
+
+    ok_count = 0
+    for audio_path in audios:
+        if process_one(audio_path, deliver_dir, repo_home, args, hf_token, el):
+            ok_count += 1
+        else:
+            print(f"{el()} [AVERTISSEMENT] Echec sur {audio_path.name}, passage au suivant.")
+
+    print(f"{el()} === Fini : {ok_count}/{len(audios)} audio(s) transcrit(s). ===")
+    if ok_count < len(audios):
+        sys.exit(2)
 
 
 if __name__ == "__main__":

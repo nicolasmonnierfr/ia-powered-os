@@ -232,6 +232,22 @@
   </dl>
 </div>
 
+<div class="recon-overlay" id="reconcilePanel">
+  <div class="recon-modal">
+    <div class="recon-head">
+      <h2>Réconcilier les locuteurs</h2>
+      <p>La diarisation a produit des locuteurs <b>distincts par tronçon</b> (T1-A, T2-B…).
+         Écoute un extrait de chacun et associe-le à un locuteur global.</p>
+      <div class="recon-progress" id="reconcileProgress"></div>
+    </div>
+    <div class="recon-list" id="reconcileList"></div>
+    <div class="recon-foot">
+      <button class="btn btn-ghost" id="reconcileClose">Fermer sans appliquer</button>
+      <button class="btn" id="reconcileApply">Appliquer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -746,21 +762,5 @@
   buildControls();
 })();
 </script>
-
-<div class="recon-overlay" id="reconcilePanel">
-  <div class="recon-modal">
-    <div class="recon-head">
-      <h2>Réconcilier les locuteurs</h2>
-      <p>La diarisation a produit des locuteurs <b>distincts par tronçon</b> (T1-A, T2-B…).
-         Écoute un extrait de chacun et associe-le à un locuteur global.</p>
-      <div class="recon-progress" id="reconcileProgress"></div>
-    </div>
-    <div class="recon-list" id="reconcileList"></div>
-    <div class="recon-foot">
-      <button class="btn btn-ghost" id="reconcileClose">Fermer sans appliquer</button>
-      <button class="btn" id="reconcileApply">Appliquer</button>
-    </div>
-  </div>
-</div>
 
 </body></html>

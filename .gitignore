@@ -3,17 +3,11 @@ config/.env
 *.env
 !config/.env.example
 
-# === Données sensibles (audios, transcriptions, sorties) ===
-# On ignore le CONTENU de data/ (audios, transcriptions) mais on conserve
-# l'arborescence du pipeline via les .gitkeep, pour qu'elle existe au clone.
+# === Données sensibles (audios, transcriptions, intermédiaires) ===
+# data/ ne contient que des intermédiaires (data/.chunks/) : tout est ignoré,
+# on conserve seulement le dossier vide via .gitkeep.
 data/**
 !data/
-!data/a_traiter/
-!data/en_cours/
-!data/transcrit/
-!data/a_taguer/
-!data/archive/
-!data/**/.gitkeep
 !data/.gitkeep
 
 # === Environnement Python ===
@@ -43,3 +37,6 @@ desktop.ini
 *.log
 tmp/
 temp/
+
+# Archives du repo (artefacts, jamais versionnés)
+*.zip

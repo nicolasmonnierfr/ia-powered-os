@@ -160,16 +160,43 @@ tronçons sauvegardés au fur et à mesure.
 4. **Fusion** : recolle les tronçons en réajustant les timestamps et en
    éliminant les doublons de chevauchement → `.txt` / `.srt` / `.json` finaux.
 
-### Utilisation
+### Utilisation : appelable depuis le répertoire d'une mission
+
+Ce script se lance **depuis le dossier de la mission** (le répertoire courant).
+Il y écrit les livrables, et garde les fichiers intermédiaires côté IA-Powered-OS.
+
+**Prérequis** : définir une fois `IA_POWERED_OS_HOME` vers la racine du repo
+(voir plus bas). Sinon le script se rabat sur son propre emplacement, avec un
+avertissement.
+
 ```powershell
-python tools\transcription\transcribe_robuste.py "data\entretien_1h30.m4a"
+# Depuis le dossier de la mission, ex. D:\Missions\Acme\
+& "$env:IA_POWERED_OS_HOME\.venv\Scripts\python.exe" "$env:IA_POWERED_OS_HOME\tools\transcription\transcribe_robuste.py" --diarize
 ```
 
-Options : `--chunk-min` (défaut 15), `--overlap-sec` (défaut 2),
-`--model`, `--language`, `--work-dir`, `--output-dir`.
+- **Sans argument** : traite TOUS les audios du répertoire courant.
+- **Avec un nom de fichier** : ne traite que celui-là.
+
+Options : `--chunk-min` (défaut 15, entier), `--overlap-sec` (défaut 2 ; porté
+à 5 si `--diarize`), `--model`, `--language`, `--diarize`.
+
+**Où vont les fichiers :**
+- **Livrables** (`<nom>.srt`, `<nom>.txt`) → **répertoire de la mission** (courant).
+- **Intermédiaires** (tronçons + `<nom>.json` complet) →
+  `IA_POWERED_OS_HOME/data/.chunks/AAAAMMJJ-<nom>/` (isolés par date+nom).
 
 En cas d'interruption, **relancer exactement la même commande** : la reprise
-est automatique.
+est automatique (tronçons déjà faits sautés).
+
+### Définir IA_POWERED_OS_HOME (une fois)
+```powershell
+[Environment]::SetEnvironmentVariable("IA_POWERED_OS_HOME", "D:\Nicolas\IA-Powered-OS", [EnvironmentVariableTarget]::User)
+```
+Puis rouvrir PowerShell.
+
+> ⚠️ La réconciliation des locuteurs (tagueur) exporte un `.srt`/`.txt` corrigé
+> que tu déposes dans la mission, écrasant les fichiers initiaux. Au pire, seuls
+> les locuteurs étaient faux : pas de perte de contenu.
 
 ### Diarisation par tronçon (option `--diarize`)
 Par défaut, ce script ne diarise pas (sortie `.srt` sans locuteur → tagging
