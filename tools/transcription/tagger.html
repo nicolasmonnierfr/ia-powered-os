@@ -973,14 +973,35 @@
   function buildCompactTimeline() {
     if (segments.length === 0) return { kept: [], keepIntervals: [], cutIntervals: [] };
 
-    // 1. Intervalles coupes (temps original), fusionnes si adjacents/chevauchants.
+    // 1. Intervalles coupes (temps original), fusionnes si adjacents.
+    // IMPORTANT : deux segments consecutifs ne sont presque jamais strictement
+    // contigus (WhisperX laisse des micro-gaps : seg fini a 4.00, suivant a 4.08).
+    // Sans tolerance, N segments coupes a la suite donnent N intervalles distincts
+    // -> plan enorme + les micro-gaps restent dans l'audio (desynchro).
+    // On fusionne donc deux coupes des qu'aucun segment CONSERVE ne les separe.
     const rawCuts = segments.filter(s => s.cut).map(s => ({ start: s.start, end: s.end }));
     rawCuts.sort((a, b) => a.start - b.start);
+
+    // borne de chaque "trou" entre coupes : on ne fusionne que s'il n'y a pas de
+    // segment conserve dans l'intervalle [last.end, c.start].
+    const keptSegs = segments.filter(s => !s.cut).map(s => ({ start: s.start, end: s.end }));
+    function hasKeptBetween(a, b) {
+      // existe-t-il un segment conserve qui chevauche ]a, b[ ?
+      return keptSegs.some(s => s.end > a + 1e-6 && s.start < b - 1e-6);
+    }
+
     const cutIntervals = [];
     for (const c of rawCuts) {
       const last = cutIntervals[cutIntervals.length - 1];
-      if (last && c.start <= last.end + 1e-6) { last.end = Math.max(last.end, c.end); }
-      else cutIntervals.push({ start: c.start, end: c.end });
+      if (last && c.start <= last.end + 1e-6) {
+        // strictement adjacent/chevauchant
+        last.end = Math.max(last.end, c.end);
+      } else if (last && !hasKeptBetween(last.end, c.start)) {
+        // separes par un simple gap (aucun contenu conserve entre les deux) -> fusionner
+        last.end = Math.max(last.end, c.end);
+      } else {
+        cutIntervals.push({ start: c.start, end: c.end });
+      }
     }
 
     // 2. Recalage des segments conserves : decalage = somme des coupes qui finissent avant le segment.
