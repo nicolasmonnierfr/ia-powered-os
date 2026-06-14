@@ -249,6 +249,93 @@ de collision, contrairement à l'aller).
 > Il ne doit JAMAIS être renvoyé vers une IA externe. Le script doit le rappeler
 > et nommer la sortie de façon explicite (`_REPERSONNALISE`).
 
+### 13. BUG — le type des entités est perdu à l'export (tout devient PRODUIT)
+**Symptôme** : dans `table_correspondance.json`, des entités identifiées comme
+PERSONNE (badge correct dans l'éditeur) ressortent typées `PRODUIT`.
+
+**Cause identifiée** (code lu le 14/06/2026) :
+- L'éditeur **n'écrit jamais le type** dans le YAML. Sous `forcer:`, il n'écrit
+  que le pseudo comme clé (`PERSONNE_1:`) ; l'attribut interne `g.type` (le badge
+  bleu à l'écran) n'est pas exporté.
+- `appliquer.py` **déduit** le type du **préfixe du pseudo** via
+  `type_from_pseudo()` : `p.split("_")[0]`, et si ce préfixe n'est pas dans
+  `TYPES = [PERSONNE, LIEU, ORG, PRODUIT, EMAIL, TEL]`, il renvoie `PRODUIT` par
+  défaut.
+- Donc un pseudo parlant (`CONSULTANT_1`, `SOCIETE_1`) → préfixe inconnu →
+  typé `PRODUIT`, quel que soit le badge affiché dans l'éditeur.
+
+**Lien avec #8** : même racine (le pseudo porte seul l'information). Tant que le
+préfixe n'est pas un type reconnu, le type est faux.
+
+**Impact réel** : le **remplacement reste correct** (le type ne sert qu'à
+l'affichage/regroupement, pas au remplacement). Seule la métadonnée `type` de la
+table est erronée. Mais cette métadonnée compte pour la lisibilité, le tri, et
+un éventuel traitement par type.
+
+**Correctif possible** (à trancher avec #8 et #14) :
+- soit l'éditeur **écrit explicitement le type** dans le YAML (changement de
+  format de l'`alias.yaml`),
+- soit on impose que le préfixe du pseudo SOIT un type de `TYPES` (mais cela
+  interdit les pseudos parlants comme `CONSULTANT_1`).
+
+**Sévérité** : métadonnée erronée, non bloquante pour l'anonymisation.
+Identifié le 14/06/2026.
+
+---
+
+## Architecture (structurant — à cadrer avant tout code)
+
+### 14. ★ PRIORITAIRE — Refondre le modèle de persistance (alias.yaml + table.json)
+**Problème** : deux fichiers se recoupent partiellement et créent des frictions
+et des pertes d'information.
+
+- `alias.yaml` : configuration **éditée à la main** (entrée). Contient les
+  forçages (`forcer:`), les faux positifs (`ignorer:`), les locuteurs génériques,
+  les réglages.
+- `table_correspondance.json` : artefact **généré** par `appliquer.py` (sortie).
+  Contient pseudo + `canonique` + `variantes` + `type` + `compteurs` + `client`.
+  Sur-ensemble de ce qui a été remplacé (détection auto **+** forçages).
+
+**Frictions constatées (14/06/2026)** :
+1. **Redondance gênante** : la correspondance pseudo↔variantes existe dans les
+   deux ; éditer l'un ne met pas l'autre à jour → divergence possible.
+2. **« Ne pas éditer le JSON » est intenable en pratique** : quand le JSON
+   contient des erreurs (cf. types faux, #13), regénérer coûte une passe
+   complète (detecter → éditeur → appliquer) ET, tant que les bugs ne sont pas
+   corrigés, rejoue les mêmes erreurs. Éditer le JSON à la main est alors plus
+   simple. → La table doit être **éditable** sans tabou.
+3. **Perte d'information inter-séances (le point le plus fort)** : les
+   `ignorer:` (faux positifs : « Ancienneté », politesses, lieux communs) sont
+   **réutilisables d'une séance à l'autre**, mais ils vivent dans le YAML, **ne
+   sont pas** dans la table JSON (rien n'a été remplacé), et `--table` ne
+   réinjecte que le JSON. → On re-trie les mêmes faux positifs à chaque
+   transcript. La mémoire inter-séances est donc bancale : les pseudos se
+   réutilisent, mais pas les décisions de tri.
+
+**Pistes à évaluer (décision d'archi, non tranchée)** :
+- **Piste A — Mémoire client unique** : un seul artefact réutilisable par client
+  (pseudos + canoniques + faux positifs + génériques + types), éditable et
+  versionnable. Le YAML par transcript ne porte que les forçages spécifiques et
+  alimente cette mémoire.
+- **Piste B — Deux fichiers mais cohérents** : la table JSON mémorise AUSSI les
+  `ignorer:`/`generiques:` (même sans remplacement), et `--table` les réinjecte.
+  On garde la séparation entrée/sortie sans perte d'info.
+- **Piste C — Tout dans le YAML** : le YAML porte toute la mémoire (forçages +
+  ignorer + génériques + table apprise) ; le JSON devient un export jetable.
+
+**Impacts** : touche `detecter.py`, `appliquer.py`, `editeur_alias.html`,
+`reconcilier.py`, le `SCHEMA.md`, ET la dé-anonymisation (#12). C'est le **format
+d'échange central** du pipeline.
+
+**Dépendances** : à arbitrer AVANT ou EN MÊME TEMPS que #8 et #13 (le sort du
+« type » et des pseudos parlants dépend du format retenu). Conditionne aussi #12
+(quelle source pour le canonique du retour).
+
+**Décision actée le 14/06/2026** : la table JSON **peut** être éditée à la main
+pour des corrections ponctuelles (types, canonique), en attendant cette refonte.
+Ce n'est pas un fichier sacré — la précaution est de ne pas l'écraser par un
+re-run involontaire.
+
 ---
 
 ## Industrialisation / automatisation
