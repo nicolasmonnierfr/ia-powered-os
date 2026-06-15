@@ -69,7 +69,7 @@ function Get-SousDossier {
     return $d
 }
 
-# Repertoire parent (client/mission) : alias.yaml + table_correspondance.json.
+# Repertoire parent (client/mission) : niveau du memoire_client.json.
 function Get-ParentDir { return (Split-Path -Parent (Get-EntretienRoot)) }
 
 # --- Recherche d'audio dans le repertoire courant ----------------------------
@@ -98,17 +98,21 @@ function Move-Vers {
     return $true
 }
 
-# --- Recherche ascendante alias.yaml / table_correspondance.json -------------
-# Le perimetre d'anonymisation (= "client") est defini par l'emplacement de
-# alias.yaml : on remonte les dossiers parents depuis l'entretien jusqu'a en
-# trouver un. Le PREMIER trouve (le plus proche) gagne. Si aucun n'existe, on
-# en initialisera un dans le parent immediat (gere par le wrapper).
+# --- Recherche ascendante memoire_client.json -------------------------------
+# Refonte #14 : le perimetre d'anonymisation (= "client") est defini par
+# l'emplacement de memoire_client.json (artefact UNIQUE remplacant alias.yaml +
+# table_correspondance.json). On remonte les dossiers parents depuis l'entretien
+# jusqu'a en trouver un. Le PREMIER trouve (le plus proche) gagne. Si aucun
+# n'existe, on en initialisera un dans le parent immediat (gere par le wrapper).
+#
+# Compat : si aucune memoire mais un ancien alias.yaml est trouve, on le signale
+# pour proposer la migration (migrer.py).
 
-function Find-AliasAscendant {
-    # Retourne le chemin du alias.yaml trouve en remontant, ou $null.
+function Find-MemoireAscendant {
+    # Retourne le chemin du memoire_client.json trouve en remontant, ou $null.
     $dir = Get-ParentDir   # on commence AU-DESSUS de l'entretien
     while ($dir -and (Test-Path -LiteralPath $dir)) {
-        $cand = Join-Path $dir "alias.yaml"
+        $cand = Join-Path $dir "memoire_client.json"
         if (Test-Path -LiteralPath $cand) { return (Resolve-Path -LiteralPath $cand).Path }
         $parent = Split-Path -Parent $dir
         if ($parent -eq $dir) { break }   # racine atteinte
@@ -117,29 +121,43 @@ function Find-AliasAscendant {
     return $null
 }
 
+function Find-AncienAliasAscendant {
+    # Detecte un ancien alias.yaml (pour proposer la migration). $null sinon.
+    $dir = Get-ParentDir
+    while ($dir -and (Test-Path -LiteralPath $dir)) {
+        $cand = Join-Path $dir "alias.yaml"
+        if (Test-Path -LiteralPath $cand) { return (Resolve-Path -LiteralPath $cand).Path }
+        $parent = Split-Path -Parent $dir
+        if ($parent -eq $dir) { break }
+        $dir = $parent
+    }
+    return $null
+}
+
 # Resout le perimetre d'anonymisation : renvoie un objet avec
-#   AliasPath  : chemin du alias.yaml (existant ou a creer)
-#   TablePath  : chemin de table_correspondance.json (a cote de l'alias)
-#   Dir        : dossier du perimetre
-#   AliasExiste: $true si l'alias existait deja
-# Si aucun alias n'est trouve, on cible le parent IMMEDIAT de l'entretien.
+#   MemoirePath   : chemin du memoire_client.json (existant ou a creer)
+#   Dir           : dossier du perimetre
+#   MemoireExiste : $true si la memoire existait deja
+#   AncienAlias   : chemin d'un ancien alias.yaml a migrer, ou $null
+# Si aucune memoire n'est trouvee, on cible le parent IMMEDIAT de l'entretien.
 function Resolve-Perimetre {
-    $found = Find-AliasAscendant
+    $found = Find-MemoireAscendant
     if ($found) {
         $dir = Split-Path -Parent $found
         return [pscustomobject]@{
-            AliasPath   = $found
-            TablePath   = (Join-Path $dir "table_correspondance.json")
-            Dir         = $dir
-            AliasExiste = $true
+            MemoirePath   = $found
+            Dir           = $dir
+            MemoireExiste = $true
+            AncienAlias   = $null
         }
     }
-    $parent = Get-ParentDir
+    $ancien = Find-AncienAliasAscendant
+    $parent = if ($ancien) { Split-Path -Parent $ancien } else { Get-ParentDir }
     return [pscustomobject]@{
-        AliasPath   = (Join-Path $parent "alias.yaml")
-        TablePath   = (Join-Path $parent "table_correspondance.json")
-        Dir         = $parent
-        AliasExiste = $false
+        MemoirePath   = (Join-Path $parent "memoire_client.json")
+        Dir           = $parent
+        MemoireExiste = $false
+        AncienAlias   = $ancien
     }
 }
 

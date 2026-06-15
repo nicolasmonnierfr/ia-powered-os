@@ -4,20 +4,27 @@ detecter.py — Étape de DÉTECTION du pipeline d'anonymisation (local).
 
 Lit un transcript taggé (.txt ou .srt produit par le tagueur), repère les
 entités à anonymiser (personnes, lieux, organisations, emails, téléphones) via
-Presidio (spaCy FR) + une liste d'alias forcés optionnelle, puis écrit un
-"état intermédiaire" JSON décrivant les candidats (texte, type, occurrences,
-extraits de contexte, score, pseudo proposé).
+Presidio (spaCy FR) + la mémoire client existante, puis écrit un état
+intermédiaire JSON (`.etat.json`) décrivant les candidats.
 
-Cet état intermédiaire est ensuite chargé par l'éditeur/réconciliateur HTML
-pour validation humaine, avant l'application finale (appliquer.py).
+NOUVEAU FORMAT (refonte #14) : la mémoire d'entrée est un artefact UNIQUE par
+client, `memoire_client.json` (pseudos + variantes + types + faux positifs +
+locuteurs génériques + réglages). Voir memoire.py pour le schéma.
+
+Rétrocompatibilité : si on ne dispose que d'anciens fichiers (alias.yaml +
+table.json), passe-les via --alias/--table : ils sont migrés à la volée en
+mémoire (sans réécrire de fichier ; pour convertir définitivement, voir
+migrer.py).
 
 100% local. Voir tools/anonymisation/README.md et SCHEMA.md.
 
 Usage :
     python detecter.py exemple.srt
-    python detecter.py exemple.srt --alias alias_acme.yaml
-    python detecter.py exemple.srt --table table_acme.json   # réutilise une table existante
+    python detecter.py exemple.srt --memoire memoire_client.json
+    python detecter.py exemple.srt --ignorer-global ignorer_global.json
     python detecter.py exemple.srt --out etat.json
+    # rétrocompat :
+    python detecter.py exemple.srt --alias alias.yaml --table table.json
 """
 
 import argparse
@@ -26,15 +33,8 @@ import re
 import sys
 from pathlib import Path
 
-# Mapping type interne <-> type Presidio
-TYPE_FROM_PRESIDIO = {
-    "PERSON": "PERSONNE",
-    "LOCATION": "LIEU",
-    "ORGANIZATION": "ORG",
-    "EMAIL_ADDRESS": "EMAIL",
-    "PHONE_NUMBER": "TEL",
-}
-PRESIDIO_FROM_TYPE = {v: k for k, v in TYPE_FROM_PRESIDIO.items()}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import memoire as M  # noqa: E402
 
 
 def die(msg, code=1):
@@ -48,12 +48,10 @@ def die(msg, code=1):
 def parse_transcript(path: Path):
     """
     Retourne une liste de blocs : { 'label': str|None, 'text': str }.
-    - .srt : on extrait le texte de chaque sous-titre (en ignorant index et
-      timecodes), et l'étiquette [Locuteur] de tête si présente.
+    - .srt : texte de chaque sous-titre (index/timecodes ignorés), étiquette
+      [Locuteur] de tête si présente.
     - .txt : chaque bloc commençant par [Locuteur] ; le texte suit jusqu'au
       prochain [Locuteur].
-    Le but : séparer proprement l'ÉTIQUETTE du CORPS, pour ne pas polluer la
-    détection avec la syntaxe du transcript.
     """
     raw = path.read_text(encoding="utf-8")
     ext = path.suffix.lower()
@@ -64,7 +62,6 @@ def parse_transcript(path: Path):
             lines = [l for l in chunk.split("\n") if l.strip() != ""]
             if not lines:
                 continue
-            # retirer index numérique et ligne(s) de timecode
             body_lines = []
             for l in lines:
                 if re.fullmatch(r"\d+", l.strip()):
@@ -78,7 +75,6 @@ def parse_transcript(path: Path):
             label, text = _split_label(text)
             blocks.append({"label": label, "text": text})
     else:
-        # .txt : regrouper par étiquette
         for line in raw.replace("\r", "").split("\n"):
             if line.strip() == "":
                 continue
@@ -99,35 +95,7 @@ def _split_label(text):
 
 
 # ---------------------------------------------------------------------------
-# 2. Chargement alias + table existante
-# ---------------------------------------------------------------------------
-def load_alias(path: Path | None):
-    if not path:
-        return {"forcer": {}, "ignorer": [], "locuteurs_generiques": [],
-                "reglages": {"seuil_score": 0.5,
-                             "types": list(TYPE_FROM_PRESIDIO.keys())}}
-    try:
-        import yaml
-    except ImportError:
-        die("pyyaml requis pour lire le fichier alias. Installe-le (voir bootstrap).")
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    data.setdefault("forcer", {})
-    data.setdefault("ignorer", [])
-    data.setdefault("locuteurs_generiques", [])
-    data.setdefault("reglages", {})
-    data["reglages"].setdefault("seuil_score", 0.5)
-    data["reglages"].setdefault("types", list(TYPE_FROM_PRESIDIO.keys()))
-    return data
-
-
-def load_table(path: Path | None):
-    if not path or not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-# ---------------------------------------------------------------------------
-# 3. Détection Presidio
+# 2. Détection Presidio
 # ---------------------------------------------------------------------------
 def build_analyzer():
     from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
@@ -137,8 +105,6 @@ def build_analyzer():
     nlp_engine = NlpEngineProvider(nlp_configuration=config).create_engine()
     analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["fr"])
 
-    # Téléphone FR : Presidio reconnaît mal les formats "06 12 34 56 78" / "+33...".
-    # On ajoute un reconnaisseur regex dédié (déterministe, score élevé).
     tel_patterns = [
         Pattern(name="tel_fr_national",
                 regex=r"\b0[1-9]([ .\-]?\d{2}){4}\b", score=0.9),
@@ -170,26 +136,46 @@ def detect_in_text(analyzer, text, types, seuil):
 
 
 # ---------------------------------------------------------------------------
-# 4. Pipeline principal
+# 3. Pipeline principal
 # ---------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description="Détection d'entités à anonymiser.")
     ap.add_argument("transcript", help="Fichier .txt ou .srt taggé.")
-    ap.add_argument("--alias", help="alias.yaml (termes forcés / ignorés).")
-    ap.add_argument("--table", help="table_correspondance.json existante (réutilisation).")
+    ap.add_argument("--memoire", help=f"{M.NOM_MEMOIRE} existant (mémoire client).")
+    ap.add_argument("--ignorer-global", help="ignorer_global.json (faux positifs universels).")
     ap.add_argument("--out", help="Fichier de sortie (défaut: <nom>.etat.json).")
+    ap.add_argument("--alias", help="[ancien] alias.yaml (migré à la volée).")
+    ap.add_argument("--table", help="[ancien] table_correspondance.json (migré à la volée).")
     args = ap.parse_args()
 
     tpath = Path(args.transcript)
     if not tpath.exists():
         die(f"Transcript introuvable : {tpath}")
 
-    alias = load_alias(Path(args.alias) if args.alias else None)
-    table = load_table(Path(args.table) if args.table else None)
-    seuil = float(alias["reglages"]["seuil_score"])
-    types = alias["reglages"]["types"]
-    ignorer = {x.lower() for x in alias.get("ignorer", [])}
-    generiques = {x.lower() for x in alias.get("locuteurs_generiques", [])}
+    # --- Charger la mémoire client (nouveau format prioritaire) -------------
+    if args.memoire:
+        mem = M.charger_memoire(Path(args.memoire))
+    elif args.alias or args.table:
+        mem = M.migrer_depuis_ancien(
+            Path(args.alias) if args.alias else None,
+            Path(args.table) if args.table else None)
+    else:
+        mem = M.memoire_vide()
+
+    ignorer_global = M.charger_ignorer_global(
+        Path(args.ignorer_global) if args.ignorer_global else None)
+
+    seuil = float(mem["reglages"]["seuil_score"])
+    types = mem["reglages"]["types"]
+    ignorer = {x.lower() for x in mem.get("ignorer", [])} | {x.lower() for x in ignorer_global}
+    generiques = {x.lower() for x in mem.get("locuteurs_generiques", [])}
+
+    existing = M.index_variantes(mem)
+    forced_map = {}
+    for e in mem.get("entrees", []):
+        if e.get("source") == "alias":
+            for v in e.get("variantes", []):
+                forced_map[v.lower()] = e["pseudo"]
 
     blocks = parse_transcript(tpath)
     full_text = "\n".join(b["text"] for b in blocks)
@@ -198,8 +184,8 @@ def main():
     print("Chargement du modèle FR (Presidio + spaCy)…")
     analyzer = build_analyzer()
 
-    # 4a. Détection auto dans le corps de chaque bloc
-    found = {}  # clé = (texte_normalisé) -> dict candidat
+    found = {}
+
     def add_occurrence(txt, typ_interne, score, contexte, source):
         key = txt.strip()
         if not key or key.lower() in ignorer:
@@ -214,51 +200,46 @@ def main():
             c["exemples"].append(contexte)
 
     for b in blocks:
-        # étiquette de locuteur : anonymisée sauf si générique
         if b["label"] and b["label"].lower() not in generiques:
-            # on traite l'étiquette comme une PERSONNE candidate
             add_occurrence(b["label"], "PERSONNE", 0.99,
                            f"[{b['label']}] {b['text'][:40]}…", "etiquette")
         for (txt, ptype, score) in detect_in_text(analyzer, b["text"], types, seuil):
-            typ = TYPE_FROM_PRESIDIO.get(ptype, ptype)
+            typ = M.TYPE_FROM_PRESIDIO.get(ptype, ptype)
             ctx = _context(b["text"], txt)
             add_occurrence(txt, typ, score, ctx, "ner")
 
-    # 4b. Alias forcés : injecter / fusionner (priorité absolue)
-    forced_map = {}  # variante.lower() -> pseudo
-    for pseudo, variantes in alias.get("forcer", {}).items():
-        ptype = _type_from_pseudo(pseudo)
-        for v in variantes:
-            forced_map[v.lower()] = pseudo
-            occ = len(re.findall(re.escape(v), full_text, flags=re.IGNORECASE))
-            if v not in found:
-                found[v] = {"texte": v, "type": ptype, "occurrences": occ,
+    # Forçages connus : ré-exposés en candidats (cohérence dans l'éditeur)
+    for e in mem.get("entrees", []):
+        if e.get("source") != "alias":
+            continue
+        for v in e.get("variantes", []):
+            if v in found:
+                found[v]["source"] = "alias"
+                found[v]["type"] = e["type"]
+            elif v.lower() not in ignorer:
+                occ = len(re.findall(re.escape(v), full_text, flags=re.IGNORECASE))
+                found[v] = {"texte": v, "type": e["type"], "occurrences": occ,
                             "score": 1.0, "source": "alias", "exemples": []}
                 ctx = _context(full_text, v)
                 if ctx:
                     found[v]["exemples"].append(ctx)
-            else:
-                found[v]["source"] = "alias"
-                found[v]["type"] = ptype   # le type suit le pseudo forcé
 
-    # 4c. Attribution des pseudos proposés (en réutilisant la table si fournie)
-    candidats = assign_pseudos(list(found.values()), forced_map, table)
+    candidats = assign_pseudos(list(found.values()), forced_map, existing, mem)
 
     etat = {
         "transcript": tpath.name,
         "candidats": candidats,
-        "table_source": args.table or None,
+        "memoire_source": args.memoire or None,
     }
     out = Path(args.out) if args.out else tpath.with_suffix(".etat.json")
     out.write_text(json.dumps(etat, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # Résumé console
     print(f"\n{len(candidats)} entité(s) candidate(s) :")
     for c in sorted(candidats, key=lambda x: (x["type"], -x["occurrences"])):
-        print(f"  {c['pseudo_propose']:12} <- {c['texte']!r:30} "
+        print(f"  {c['pseudo_propose']:14} <- {c['texte']!r:30} "
               f"[{c['type']}, {c['occurrences']}x, {c['source']}, score {c['score']:.2f}]")
     print(f"\nÉtat intermédiaire écrit : {out}")
-    print("Étape suivante : éditer/valider dans l'éditeur HTML, puis appliquer.")
+    print("Étape suivante : valider dans l'éditeur HTML, puis appliquer.")
 
 
 def _context(text, needle, width=35):
@@ -270,38 +251,15 @@ def _context(text, needle, width=35):
     return ("…" if a > 0 else "") + text[a:b].strip() + ("…" if b < len(text) else "")
 
 
-def _type_from_pseudo(pseudo):
-    base = pseudo.split("_")[0].upper()
-    return base if base in PRESIDIO_FROM_TYPE else "PRODUIT" if base == "PRODUIT" else base
-
-
-def assign_pseudos(cands, forced_map, table):
-    """Attribue un pseudo proposé à chaque candidat, en réutilisant la table."""
-    existing = {}   # variante.lower() -> pseudo  (depuis la table mémoire)
-    counters = {}   # type -> max numéro utilisé
-    if table:
-        for e in table.get("entrees", []):
-            for v in e.get("variantes", []):
-                existing[v.lower()] = e["pseudo"]
-        counters = dict(table.get("compteurs", {}))
-
-    def bump(pseudo):
-        """Réserve le numéro d'un pseudo déjà attribué pour éviter les collisions."""
-        m = re.match(r"([A-ZÉ]+)_(\d+)$", pseudo)
-        if m:
-            typ, num = m.group(1), int(m.group(2))
-            counters[typ] = max(counters.get(typ, 0), num)
-
-    # Réserver tous les pseudos déjà connus (table + alias forcés)
-    for p in existing.values():
-        bump(p)
+def assign_pseudos(cands, forced_map, existing, mem):
+    """Attribue un pseudo proposé à chaque candidat, en réutilisant la mémoire."""
+    counters = M.compteurs_depuis_entrees(mem.get("entrees", []))
+    for k, v in mem.get("compteurs", {}).items():
+        counters[k] = max(counters.get(k, 0), v)
     for p in set(forced_map.values()):
-        bump(p)
-
-    def next_pseudo(typ):
-        n = counters.get(typ, 0) + 1
-        counters[typ] = n
-        return f"{typ}_{n}"
+        m = re.match(r"([A-ZÉ]+)_(\d+)$", p)
+        if m:
+            counters[m.group(1)] = max(counters.get(m.group(1), 0), int(m.group(2)))
 
     for c in cands:
         key = c["texte"].lower()
@@ -310,7 +268,7 @@ def assign_pseudos(cands, forced_map, table):
         elif key in existing:
             c["pseudo_propose"] = existing[key]
         else:
-            c["pseudo_propose"] = next_pseudo(c["type"])
+            c["pseudo_propose"] = M.prochain_pseudo(c["type"], counters)
     return cands
 
 

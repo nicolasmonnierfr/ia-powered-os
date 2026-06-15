@@ -10,13 +10,14 @@ au clavier pour :
   - exclure les faux positifs,
   - déclarer des étiquettes de locuteurs génériques.
 
-En sortie : un alias.yaml (mémoire de tes décisions), relisible par detecter.py
-et par l'éditeur HTML. Pour les cas complexes, préférer l'éditeur HTML.
+En sortie : un memoire_client.json (refonte #14), relisible par detecter.py,
+appliquer.py et l'éditeur HTML. Pour les cas complexes, préférer l'éditeur HTML.
 
 Usage :
     python reconcilier.py exemple.etat.json
-    python reconcilier.py exemple.etat.json --out alias_acme.yaml
-    python reconcilier.py exemple.etat.json --auto-fusion   # applique les fusions évidentes sans demander
+    python reconcilier.py exemple.etat.json --out memoire_client.json
+    python reconcilier.py exemple.etat.json --memoire memoire_client.json  # fusionne dans une mémoire existante
+    python reconcilier.py exemple.etat.json --auto-fusion
 """
 
 import argparse
@@ -26,7 +27,11 @@ import sys
 import unicodedata
 from pathlib import Path
 
-TYPES = ["PERSONNE", "LIEU", "ORG", "PRODUIT", "EMAIL", "TEL"]
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+import memoire as M  # noqa: E402
+
+TYPES = M.TYPES
 
 
 def die(msg, code=1):
@@ -110,7 +115,8 @@ def ask(prompt, choices=None, default=None):
 def main():
     ap = argparse.ArgumentParser(description="Réconciliation CLI des entités détectées.")
     ap.add_argument("etat", help="État intermédiaire JSON (detecter.py).")
-    ap.add_argument("--out", help="alias.yaml de sortie (défaut: alias.yaml).")
+    ap.add_argument("--out", help=f"Sortie (défaut: {M.NOM_MEMOIRE}).")
+    ap.add_argument("--memoire", help="memoire_client.json existant à enrichir.")
     ap.add_argument("--auto-fusion", action="store_true",
                     help="Applique les fusions suggérées sans confirmation (prudent : à relire).")
     args = ap.parse_args()
@@ -187,36 +193,47 @@ def main():
             continue  # re-afficher l'entité
         i += 1
 
-    # 3) Export alias.yaml
-    out = Path(args.out) if args.out else Path("alias.yaml")
-    write_yaml(out, groups, ignored, generiques, etat.get("transcript", ""))
-    print(f"\n[OK] alias.yaml écrit : {out}")
-    print("     Relis-le, puis relance detecter.py --alias, ou applique avec appliquer.py.")
-    if any(not re.search(r"_\d+$", g["pseudo"]) for g in groups):
-        print("     /!\\ Certains pseudos sont incomplets (PERSONNE_?). "
-              "Numérote-les dans l'éditeur HTML ou à la main.")
+    # 3) Export memoire_client.json (refonte #14)
+    out = Path(args.out) if args.out else Path(M.NOM_MEMOIRE)
+    mem = M.charger_memoire(Path(args.memoire)) if args.memoire else M.memoire_vide()
+    fusionner_dans_memoire(mem, groups, ignored, generiques)
+    M.ecrire_memoire(out, mem)
+    print(f"\n[OK] memoire_client.json écrit : {out}")
+    print("     Relis-le, puis relance detecter.py --memoire, ou applique avec appliquer.py.")
+    incomplets = [g["pseudo"] for g in groups if "_?" in g["pseudo"] or not g["pseudo"].strip()]
+    if incomplets:
+        print(f"     /!\\ Pseudos incomplets : {', '.join(incomplets)}. "
+              "Corrige-les dans l'éditeur HTML ou à la main.")
 
 
-def yq(s):
-    return '"' + str(s).replace('"', '\\"') + '"'
-
-
-def write_yaml(path, groups, ignored, generiques, transcript):
-    out = "# alias.yaml — généré par reconcilier.py\n"
-    if transcript:
-        out += f"# Transcript de référence : {transcript}\n"
-    out += "\nforcer:\n"
+def fusionner_dans_memoire(mem, groups, ignored, generiques):
+    """Injecte les groupes/ignorer/generiques validés dans une mémoire (refonte #14)."""
+    par_pseudo = {e["pseudo"]: e for e in mem["entrees"]}
     for g in groups:
-        out += f"  {g['pseudo']}:\n"
-        for v in g["variants"]:
-            out += f"    - {yq(v['texte'])}\n"
-    out += "\nignorer:\n"
-    out += "  []\n" if not ignored else "".join(f"  - {yq(x)}\n" for x in ignored)
-    out += "\nlocuteurs_generiques:\n"
-    out += "  []\n" if not generiques else "".join(f"  - {yq(x)}\n" for x in generiques)
-    out += "\nreglages:\n  seuil_score: 0.5\n"
-    out += '  types: ["PERSON","LOCATION","ORGANIZATION","EMAIL_ADDRESS","PHONE_NUMBER"]\n'
-    path.write_text(out, encoding="utf-8")
+        pseudo = (g["pseudo"] or "").strip()
+        if not pseudo:
+            continue
+        variantes = [v["texte"] for v in g["variants"]]
+        canonique = max(variantes, key=len) if variantes else pseudo
+        if pseudo in par_pseudo:
+            e = par_pseudo[pseudo]
+            for vt in variantes:
+                if vt not in e["variantes"]:
+                    e["variantes"].append(vt)
+            e["type"] = g["type"]
+            e["canonique"] = max(e["variantes"], key=len)
+        else:
+            e = {"pseudo": pseudo, "type": g["type"], "canonique": canonique,
+                 "variantes": variantes,
+                 "source": "alias" if any(v.get("source") == "alias" for v in g["variants"]) else "manuel"}
+            mem["entrees"].append(e); par_pseudo[pseudo] = e
+    for x in ignored:
+        if x not in mem["ignorer"]:
+            mem["ignorer"].append(x)
+    for x in generiques:
+        if x not in mem["locuteurs_generiques"]:
+            mem["locuteurs_generiques"].append(x)
+    mem["compteurs"] = M.compteurs_depuis_entrees(mem["entrees"])
 
 
 if __name__ == "__main__":

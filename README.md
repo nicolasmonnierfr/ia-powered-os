@@ -46,13 +46,13 @@ IA-Powered-OS/
 | Outil | Description | État |
 |-------|-------------|------|
 | `tools/transcription` | Transcription + diarisation d'entretiens (WhisperX, local) + tagueur | En cours |
-| `tools/anonymisation` | Anonymisation locale des transcripts (Presidio/spaCy FR) avec pseudonymes cohérents et table de correspondance réutilisable | En cours |
+| `tools/anonymisation` | Anonymisation locale des transcripts (Presidio/spaCy FR) avec pseudonymes cohérents et mémoire client unique réutilisable (+ dé-anonymisation) | En cours |
 
 ## Commande `ia` (industrialisation)
 
 Le pipeline complet se pilote via une commande unique, lancée **depuis le
 dossier d'un entretien** : `ia transcrire`, `ia taguer`, `ia couper`,
-`ia anonymiser detecter` / `appliquer`. Installation : `.\scripts\installer-ia.ps1`.
+`ia analyser` / `ia anonymiser` / `ia repersonnaliser`. Installation : `.\scripts\installer-ia.ps1`.
 Voir `scripts/GUIDE-USAGE.md`.
 
 > L'orchestration par Claude Code (pilotage automatique du pipeline) sera

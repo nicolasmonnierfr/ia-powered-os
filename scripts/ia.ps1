@@ -8,7 +8,9 @@
 #   ia transcrire [audio] [-NoDiarize] [-ChunkMin n] ...
 #   ia taguer [-Port n] [-NoBrowser]
 #   ia couper [plan] [-Audio f]
-#   ia anonymiser detecter|appliquer [-Transcript f] ...
+#   ia analyser          # detection NER + editeur (ecrit memoire_client.json)
+#   ia anonymiser        # applique le remplacement -> transcript anonymise
+#   ia repersonnaliser [-Rapport f] [-Court]   # reinjecte les vrais noms (#12)
 #   ia setenv            # active le venv dans la session courante (python/pip)
 #   ia aide              # affiche cette aide
 #
@@ -35,8 +37,9 @@ function Show-Aide {
     Write-Host "  ia transcrire [audio]            " -NoNewline -ForegroundColor Green; Write-Host "Transcrit -> 1_transcription\"
     Write-Host "  ia taguer                        " -NoNewline -ForegroundColor Green; Write-Host "Ouvre le tagueur (audio+srt charges) -> 2_coupe\"
     Write-Host "  ia couper [plan]                 " -NoNewline -ForegroundColor Green; Write-Host "Reconstruit l'audio coupe -> 2_coupe\"
-    Write-Host "  ia anonymiser detecter           " -NoNewline -ForegroundColor Green; Write-Host "Detection NER + editeur d'alias"
-    Write-Host "  ia anonymiser appliquer          " -NoNewline -ForegroundColor Green; Write-Host "Applique -> 3_anonymisation\"
+    Write-Host "  ia analyser                      " -NoNewline -ForegroundColor Green; Write-Host "Detection NER + editeur -> memoire_client.json"
+    Write-Host "  ia anonymiser                    " -NoNewline -ForegroundColor Green; Write-Host "Applique le remplacement -> 3_anonymisation\"
+    Write-Host "  ia repersonnaliser [-Rapport f]  " -NoNewline -ForegroundColor Green; Write-Host "Reinjecte les vrais noms dans un rapport (#12)"
     Write-Host "  ia setenv                        " -NoNewline -ForegroundColor Green; Write-Host "Active le venv (python/pip a la main)"
     Write-Host "  ia aide                          " -NoNewline -ForegroundColor Green; Write-Host "Cette aide"
     Write-Host ""
@@ -60,18 +63,32 @@ function Invoke-Setenv {
     Write-Info  " modifier l'environnement de la session parente.)"
 }
 
+# Wrappers simples : commande -> script.
 $map = @{
     "transcrire" = "transcrire.ps1"
     "taguer"     = "taguer.ps1"
     "couper"     = "couper.ps1"
-    "anonymiser" = "anonymiser.ps1"
+}
+
+# Commandes d'anonymisation : toutes servies par anonymiser.ps1, avec une ETAPE
+# interne injectee en premier argument positionnel. (option A : un seul wrapper)
+$mapAnon = @{
+    "analyser"        = "detecter"
+    "anonymiser"      = "appliquer"
+    "repersonnaliser" = "repersonnaliser"
 }
 
 switch ($Commande) {
     { $_ -in @($null, "", "aide", "help", "-h", "--help") } { Show-Aide; break }
     "setenv" { Invoke-Setenv; break }
     default {
-        if ($map.ContainsKey($Commande)) {
+        if ($mapAnon.ContainsKey($Commande)) {
+            # anonymiser.ps1 <etape> [args...]
+            $cible = Join-Path $PSScriptRoot "anonymiser.ps1"
+            $etape = $mapAnon[$Commande]
+            & $cible $etape @Reste
+            exit $LASTEXITCODE
+        } elseif ($map.ContainsKey($Commande)) {
             $cible = Join-Path $PSScriptRoot $map[$Commande]
             if ($Reste.Count) { & $cible @Reste } else { & $cible }
             exit $LASTEXITCODE

@@ -340,6 +340,40 @@ re-run involontaire.
 
 ## Fait
 
+### 14 + 8 + 13 + 7 + 12 + 17. Refonte du modèle de persistance (16/06/2026)
+Format de persistance unifié (**piste A2**) : un **artefact unique par client**
+`memoire_client.json` (remplace `alias.yaml` + `table_correspondance.json`) +
+un `config/ignorer_global.json` partagé (faux positifs universels). Format
+**JSON**. Logique centralisée dans le nouveau module `tools/anonymisation/memoire.py`.
+
+Résolu d'un bloc :
+- **#14** (refonte persistance) : un seul fichier, éditable, mémorisant pseudos
+  + canoniques + variantes + types + faux positifs (client ET global) +
+  génériques. Les `ignorer`/`generiques` survivent désormais entre séances
+  (friction #14.3 levée).
+- **#8** (corruption pseudos non numérotés) : l'éditeur n'impose plus `_<chiffre>`
+  ; pseudos parlants (`SOCIETE`, `CONSULTANT_1`) pleinement valides. Export via
+  `JSON.stringify` (plus de générateur YAML bricolé).
+- **#13** (type perdu → PRODUIT) : `type` est un **champ explicite** par entrée,
+  écrit par l'éditeur, lu tel quel par `appliquer.py`.
+- **#7** (génériques non exportés) : UI dédiée dans l'éditeur (bouton
+  « + Locuteur générique » + section), inclus à l'export.
+- **#17** (fusion alias existant + nouvelles détections) : l'éditeur charge la
+  mémoire du périmètre PUIS fusionne les nouvelles détections (`mergeFromState`),
+  sans écraser les regroupements existants.
+- **#12** (dé-anonymisation) : nouveau script `desanonymiser.py` (mapping inverse
+  pseudo → canonique, pseudos longs d'abord, formats .txt/.md/.srt/.docx).
+
+Outils touchés : `memoire.py` (nouveau), `migrer.py` (nouveau, conversion
+ancien→nouveau), `desanonymiser.py` (nouveau), `detecter.py`, `appliquer.py`,
+`reconcilier.py`, `editeur_alias.html`, `serveur_editeur.py`, `anonymiser.ps1`,
+`_commun.ps1`, `SCHEMA.md`. Rétrocompatibilité : `--alias`/`--table` encore
+acceptés (migration à la volée) ; `migrer.py` convertit définitivement.
+
+> ⚠️ Reste à valider sous Windows : les `.ps1` (syntaxe non vérifiable hors
+> PowerShell) et l'éditeur en mode serveur (Chrome + serveur_editeur.py).
+
+
 ### 4. Scripts wrapper + commande `ia` (15/06/2026)
 Industrialisation du pipeline réalisée. Commande unique `ia` (dispatcher +
 fonction de profil PowerShell), wrappers `transcrire` / `taguer` / `couper` /

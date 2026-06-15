@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_note": "Faux positifs UNIVERSELS (valables tous clients) : politesses, titres, mots courants pris à tort pour des entités. Édite cette liste librement ; elle est chargée en plus des 'ignorer' propres à chaque client.",
+  "ignorer": [
+    "Bonjour", "Bonsoir", "Merci", "Madame", "Monsieur", "Mademoiselle",
+    "Messieurs", "Mesdames", "Cordialement", "Salut", "Oui", "Non",
+    "Alors", "Voilà", "Effectivement", "Ancienneté"
+  ]
+}

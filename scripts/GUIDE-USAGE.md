@@ -37,8 +37,7 @@ tu ne le quittes plus. Les commandes créent et remplissent les sous-dossiers :
 
 ```
 <...>/                              (niveau « périmètre » : voir anonymisation)
-├── alias.yaml                       mémoire d'anonymisation (partagée)
-├── table_correspondance.json        table pseudo<->réel (LOCALE, jamais envoyée)
+├── memoire_client.json              mémoire d'anonymisation unique (LOCALE, jamais envoyée)
 │
 └── entretien_dupont/                <-- TU LANCES LES COMMANDES ICI
     ├── entretien_dupont.m4a          audio source
@@ -94,43 +93,56 @@ ia couper
 - Trouve `plan_de_coupe.json` dans `2_coupe\` et reconstruit l'audio raccourci
   `..._coupe.m4a` (réencodage précis à la milliseconde).
 
-### 4. Anonymiser (deux temps)
+### 4. Anonymiser (trois temps)
 
 ```powershell
-ia anonymiser detecter
+ia analyser
 ```
 
 - Détecte les entités (NER local, 100 % hors ligne).
-- Ouvre l'**éditeur d'alias** dans Chrome : tu valides les entités, corriges
+- Ouvre l'**éditeur** dans Chrome : tu valides les entités, corriges
   les types, exclus les faux positifs.
-- Bouton **« Exporter alias.yaml »** : écrit `alias.yaml` au niveau du
+- Bouton **« Exporter la mémoire »** : écrit `memoire_client.json` au niveau du
   **périmètre** (voir ci-dessous).
 
 ```powershell
-ia anonymiser appliquer
+ia anonymiser
 ```
 
-- Applique l'alias : produit `..._anonymise.srt` + un rapport dans
-  `3_anonymisation\`, et met à jour `table_correspondance.json` au périmètre.
+- Applique la mémoire : produit `..._anonymise.srt` + un rapport dans
+  `3_anonymisation\`, et met à jour `memoire_client.json` au périmètre.
 
 > ⚠️ Relis toujours le transcript anonymisé avant tout envoi à une IA externe.
-> ⚠️ `table_correspondance.json` contient les vrais noms : ne JAMAIS l'envoyer.
+> ⚠️ `memoire_client.json` contient les vrais noms : ne JAMAIS l'envoyer.
+
+```powershell
+ia repersonnaliser -Rapport "rapport.md"
+```
+
+- **Chemin inverse (#12)** : une fois l'analyse revenue de l'IA externe (avec
+  des pseudos), réinjecte les vrais noms pour livrer au client. Produit un
+  fichier `..._REPERSONNALISE` (formats `.md`/`.txt`/`.srt`/`.docx`).
+- Sans `-Rapport`, prend le rapport le plus récent de `3_anonymisation\`.
+  Option `-Court` pour les prénoms plutôt que les noms complets.
+
+> ⚠️ Le fichier `..._REPERSONNALISE` contient les vrais noms : usage **local**,
+> ne jamais le renvoyer à une IA externe.
 
 ---
 
 ## Le « périmètre » d'anonymisation
 
-`alias.yaml` et `table_correspondance.json` sont **partagés entre plusieurs
+`memoire_client.json` est **partagé entre plusieurs
 entretiens** (mêmes pseudonymes d'un entretien à l'autre). Ils ne vivent donc
 PAS dans le dossier de l'entretien, mais à un niveau **au-dessus**, que tu
 choisis librement.
 
 `ia anonymiser` **remonte les dossiers parents** depuis l'entretien jusqu'à
-trouver un `alias.yaml`. Le premier trouvé (le plus proche) définit le
-périmètre. Tu peux donc placer l'`alias.yaml` au niveau client, mission ou
+trouver un `memoire_client.json`. Le premier trouvé (le plus proche) définit le
+périmètre. Tu peux donc placer la `memoire_client.json` au niveau client, mission ou
 département — la profondeur en dessous est libre.
 
-Au tout premier entretien d'un nouveau périmètre (aucun `alias.yaml` en
+Au tout premier entretien d'un nouveau périmètre (aucune `memoire_client.json` en
 remontant), il est créé dans le **parent immédiat** de l'entretien. Tu peux le
 déplacer plus haut ensuite pour élargir le périmètre.
 
@@ -157,7 +169,8 @@ Active le venv dans la session courante.
 | `ia transcrire` | transcription + diarisation | `1_transcription\` |
 | `ia taguer` | tagging locuteurs + plan de coupe | `2_coupe\` |
 | `ia couper` | audio raccourci | `2_coupe\` |
-| `ia anonymiser detecter` | détection + validation alias | `alias.yaml` (périmètre) |
-| `ia anonymiser appliquer` | application | `3_anonymisation\` |
+| `ia analyser` | détection + validation | `memoire_client.json` (périmètre) |
+| `ia anonymiser` | application du remplacement | `3_anonymisation\` |
+| `ia repersonnaliser` | réinjection des vrais noms (#12) | `..._REPERSONNALISE` |
 | `ia setenv` | active le venv | session courante |
 | `ia aide` | liste les commandes | — |

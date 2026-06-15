@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "client": "Acme",
+  "compteurs": { "PERSONNE": 2, "ORG": 1, "PRODUIT": 1 },
+  "entrees": [
+    {
+      "pseudo": "PERSONNE_1",
+      "type": "PERSONNE",
+      "canonique": "Jean Dupont",
+      "variantes": ["Jean Dupont", "Jean", "M. Dupont"],
+      "source": "ner"
+    },
+    {
+      "pseudo": "CONSULTANT_1",
+      "type": "PERSONNE",
+      "canonique": "Marie Lefèvre",
+      "variantes": ["Marie Lefèvre", "Marie"],
+      "source": "alias"
+    },
+    {
+      "pseudo": "SOCIETE",
+      "type": "ORG",
+      "canonique": "Acme Corporation",
+      "variantes": ["Acme Corporation", "Acme"],
+      "source": "alias"
+    },
+    {
+      "pseudo": "PRODUIT_1",
+      "type": "PRODUIT",
+      "canonique": "Projet Hélios",
+      "variantes": ["Projet Hélios", "Hélios"],
+      "source": "alias"
+    }
+  ],
+  "ignorer": ["Ancienneté", "Synergie"],
+  "locuteurs_generiques": ["Interviewer", "Candidat"],
+  "reglages": {
+    "seuil_score": 0.5,
+    "types": ["PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS", "PHONE_NUMBER"]
+  }
+}

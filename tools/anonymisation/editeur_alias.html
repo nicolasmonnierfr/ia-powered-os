@@ -91,10 +91,10 @@
 
 <header>
   <h1>Éditeur d'alias</h1>
-  <label class="loader">État de détection (.json)
+  <label class="loader">État de détection (.etat.json)
     <input type="file" id="stateFile" accept=".json,application/json"></label>
-  <label class="loader">ou alias existant (.yaml)
-    <input type="file" id="aliasFile" accept=".yaml,.yml,text/yaml"></label>
+  <label class="loader">ou mémoire client (memoire_client.json)
+    <input type="file" id="aliasFile" accept=".json,application/json"></label>
   <div class="stats" id="stats"></div>
 </header>
 
@@ -107,7 +107,7 @@
     Charge l'<code>état de détection</code> produit par <code>detecter.py</code> (fichier <code>.etat.json</code>)
     pour commencer.<br><br>
     Tu pourras regrouper les variantes d'une même entité (ex. « Thomas » et « Tom »),
-    corriger les types, exclure les faux positifs, puis exporter le <code>alias.yaml</code>.
+    corriger les types, exclure les faux positifs, déclarer les locuteurs génériques, puis exporter la <code>mémoire client</code>.
   </div>
 </div>
 
@@ -115,7 +115,8 @@
   <span class="hint" id="footHint"></span>
   <div class="foot-actions">
     <button class="btn ghost" id="addEntity">+ Entité manuelle</button>
-    <button class="btn primary" id="exportYaml" disabled>Exporter alias.yaml</button>
+    <button class="btn ghost" id="addGenerique">+ Locuteur générique</button>
+    <button class="btn primary" id="exportYaml" disabled>Exporter la mémoire</button>
   </div>
 </footer>
 
@@ -130,6 +131,7 @@
   let ignored = [];         // [{texte, ...}] -> liste "ignorer"
   let generiques = [];      // étiquettes de locuteurs génériques (chaînes)
   let transcriptName = "";
+  let memoireChargee = null;  // memoire_client.json chargée (préserve client/réglages/compteurs)
   let uid = 1;
 
   const wrap = document.getElementById("wrap");
@@ -176,42 +178,61 @@
     render();
   }
 
-  // ---- Chargement d'un alias.yaml existant (édition) ----
-  // Parseur YAML minimal suffisant pour notre format (forcer/ignorer/locuteurs).
+  // ---- Chargement d'une mémoire client existante (JSON) — édition #17 ----
+  // Remplace l'ancien chargement YAML. On peut fusionner une mémoire existante
+  // avec de nouvelles détections (voir mergeFromState plus bas).
   document.getElementById("aliasFile").addEventListener("change", (e) => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
-    r.onload = () => { try { loadFromYaml(r.result); } catch (err) { alert("YAML illisible : " + err.message); } };
+    r.onload = () => {
+      try { loadFromMemoire(JSON.parse(r.result)); }
+      catch (err) { alert("memoire_client.json illisible : " + err.message); }
+    };
     r.readAsText(f, "utf-8");
   });
 
-  function loadFromYaml(text) {
+  function loadFromMemoire(mem) {
+    memoireChargee = mem || {};
     groups = []; ignored = []; generiques = [];
-    const lines = text.replace(/\r/g, "").split("\n");
-    let section = null, curPseudo = null;
-    for (let raw of lines) {
-      const line = raw.replace(/#.*$/, "").replace(/\s+$/, "");
-      if (!line.trim()) continue;
-      if (/^forcer\s*:/.test(line)) { section = "forcer"; continue; }
-      if (/^ignorer\s*:/.test(line)) { section = "ignorer"; continue; }
-      if (/^locuteurs_generiques\s*:/.test(line)) { section = "gen"; continue; }
-      if (/^reglages\s*:/.test(line)) { section = "reglages"; continue; }
-      if (section === "forcer") {
-        const mP = line.match(/^\s{2}([A-Za-zÉÀ_]+_\d+)\s*:/);
-        if (mP) {
-          curPseudo = { id: nextId(), pseudo: mP[1], type: typeFromPseudo(mP[1]), variants: [] };
-          groups.push(curPseudo); continue;
-        }
-        const mV = line.match(/^\s{4}-\s*"?(.+?)"?\s*$/);
-        if (mV && curPseudo) curPseudo.variants.push(
-          { texte: mV[1], occurrences: 0, score: 1, source: "alias", exemple: "" });
-      } else if (section === "ignorer") {
-        const mV = line.match(/^\s*-\s*"?(.+?)"?\s*$/);
-        if (mV) ignored.push({ texte: mV[1] });
-      } else if (section === "gen") {
-        const mV = line.match(/^\s*-\s*"?(.+?)"?\s*$/);
-        if (mV) generiques.push(mV[1]);
+    for (const e of (mem.entrees || [])) {
+      groups.push({
+        id: nextId(), pseudo: e.pseudo, type: e.type || typeFromPseudo(e.pseudo),
+        variants: (e.variantes || []).map(t => ({
+          texte: t, occurrences: 0, score: 1, source: e.source || "alias", exemple: ""
+        }))
+      });
+    }
+    (mem.ignorer || []).forEach(t => ignored.push({ texte: t }));
+    (mem.locuteurs_generiques || []).forEach(t => generiques.push(t));
+    render();
+  }
+
+  // Fusionne de NOUVELLES détections (etat.json) dans la mémoire déjà chargée,
+  // sans écraser les regroupements existants (#17). Une variante déjà connue
+  // (présente dans un groupe) est ignorée ; une variante déjà dans "ignorer"
+  // est ignorée ; sinon elle rejoint le groupe de son pseudo proposé, ou crée
+  // un nouveau groupe.
+  function mergeFromState(data) {
+    const connues = new Set();
+    groups.forEach(g => g.variants.forEach(v => connues.add(v.texte.toLowerCase())));
+    const ignoreLow = new Set(ignored.map(it => it.texte.toLowerCase()));
+    const byPseudo = {};
+    groups.forEach(g => { byPseudo[g.pseudo] = g; });
+
+    for (const c of (data.candidats || [])) {
+      const low = c.texte.toLowerCase();
+      if (connues.has(low) || ignoreLow.has(low)) continue;
+      const key = c.pseudo_propose || (c.type + "_?");
+      let g = byPseudo[key];
+      if (!g) {
+        g = { id: nextId(), pseudo: key, type: c.type, variants: [] };
+        groups.push(g); byPseudo[key] = g;
       }
+      g.variants.push({
+        texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
+        source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || ""
+      });
+      connues.add(low);
     }
     render();
   }
@@ -223,7 +244,7 @@
 
   // ---- Rendu ----
   function render() {
-    if (groups.length === 0 && ignored.length === 0) { wrap.innerHTML =
+    if (groups.length === 0 && ignored.length === 0 && generiques.length === 0) { wrap.innerHTML =
       `<div class="empty">Aucune entité chargée.</div>`; updateStats(); return; }
     wrap.innerHTML = "";
 
@@ -238,6 +259,12 @@
     lblI.textContent = "À ignorer (jamais anonymisé) — faux positifs";
     wrap.appendChild(lblI);
     wrap.appendChild(renderIgnored());
+
+    const lblG = document.createElement("div");
+    lblG.className = "section-label";
+    lblG.textContent = "Locuteurs génériques — étiquettes [Rôle] conservées telles quelles";
+    wrap.appendChild(lblG);
+    wrap.appendChild(renderGeneriques());
 
     updateStats();
   }
@@ -364,6 +391,34 @@
     return box;
   }
 
+  function renderGeneriques() {
+    const box = document.createElement("div");
+    box.className = "group";
+    const vars = document.createElement("div");
+    vars.className = "variants";
+    if (generiques.length === 0) {
+      const e = document.createElement("div"); e.className = "hint"; e.style.padding = "8px";
+      e.textContent = "Aucun locuteur générique. Bouton « + Locuteur générique » en bas (ex. « Interviewer », « Candidat »).";
+      vars.appendChild(e);
+    }
+    generiques.forEach(name => {
+      const el = document.createElement("div"); el.className = "variant";
+      const txt = document.createElement("span"); txt.className = "vtext"; txt.textContent = name;
+      const badge = document.createElement("span"); badge.className = "type-badge type-IGNORE";
+      badge.textContent = "générique";
+      const va = document.createElement("div"); va.className = "var-actions";
+      const del = document.createElement("button"); del.className = "btn ghost"; del.textContent = "Retirer";
+      del.addEventListener("click", () => {
+        generiques = generiques.filter(x => x !== name); render();
+      });
+      va.appendChild(del);
+      el.append(txt, badge, va);
+      vars.appendChild(el);
+    });
+    box.appendChild(vars);
+    return box;
+  }
+
   // ---- Fusion / déplacement de variantes ----
   function moveVariant(payloadStr, targetGroup) {
     let p; try { p = JSON.parse(payloadStr); } catch { return; }
@@ -387,6 +442,14 @@
     moveVariant(JSON.stringify({ group: srcGroup.id, texte: v.texte }), others[n - 1]);
   }
 
+  document.getElementById("addGenerique").addEventListener("click", () => {
+    const t = prompt("Étiquette de locuteur générique à conserver (ex. « Interviewer », « Candidat ») :");
+    if (!t || !t.trim()) return;
+    const v = t.trim();
+    if (!generiques.some(x => x.toLowerCase() === v.toLowerCase())) generiques.push(v);
+    render();
+  });
+
   document.getElementById("addEntity").addEventListener("click", () => {
     const t = prompt("Texte exact de l'entité à anonymiser (ex. un nom que la détection a raté) :");
     if (!t || !t.trim()) return;
@@ -401,67 +464,105 @@
       `<span class="stat">Groupes <b>${groups.length}</b></span>
        <span class="stat">Variantes <b>${nVar}</b></span>
        <span class="stat">Ignorés <b>${ignored.length}</b></span>`;
-    exportBtn.disabled = groups.length === 0;
+    exportBtn.disabled = (groups.length === 0 && ignored.length === 0 && generiques.length === 0);
     document.getElementById("footHint").textContent = transcriptName ? `Transcript : ${transcriptName}` : "";
   }
 
-  // ---- Export YAML ----
-  function yamlQuote(s) {
-    // toujours quoter pour gérer accents, espaces, ponctuation
-    return '"' + String(s).replace(/"/g, '\\"') + '"';
-  }
-  function buildYaml() {
-    // dédupliquer les pseudos identiques en fusionnant leurs variantes
-    let out = "# alias.yaml — généré par editeur_alias.html\n";
-    if (transcriptName) out += `# Transcript de référence : ${transcriptName}\n`;
-    out += "\nforcer:\n";
-    groups.forEach(g => {
-      const pseudo = g.pseudo && /_\d+$/.test(g.pseudo) ? g.pseudo : `${g.type}_X`;
-      out += `  ${pseudo}:\n`;
-      g.variants.forEach(v => { out += `    - ${yamlQuote(v.texte)}\n`; });
+  // ---- Export : mémoire client unique (JSON) ----
+  // Refonte #14 : un seul artefact memoire_client.json (plus de alias.yaml +
+  // table.json). Le TYPE est écrit explicitement par entrée (corrige #13), et
+  // AUCUNE contrainte _<chiffre> sur le pseudo (corrige #8 : SOCIETE,
+  // CONSULTANT_1, etc. sont valides). Les locuteurs génériques (#7) et les
+  // faux positifs sont inclus.
+  function buildMemoire() {
+    // Repartir de la mémoire chargée (préserve compteurs/réglages/client),
+    // mais les entrées reflètent l'état édité à l'écran.
+    const base = memoireChargee || {};
+    const entrees = groups.map(g => {
+      const variantes = g.variants.map(v => v.texte);
+      // canonique = variante la plus longue (forme de référence)
+      const canonique = variantes.length
+        ? variantes.reduce((a, b) => (b.length > a.length ? b : a))
+        : g.pseudo;
+      // source : si une variante au moins venait d'un alias forcé, on garde
+      // "alias" ; sinon on conserve la source dominante observée.
+      const src = g.variants.some(v => v.source === "alias") ? "alias"
+                : (g.variants[0] && g.variants[0].source) || "ner";
+      return {
+        pseudo: (g.pseudo || "").trim(),
+        type: g.type,                 // <-- TYPE EXPLICITE (corrige #13)
+        canonique: canonique,
+        variantes: variantes,
+        source: src,
+      };
+    }).filter(e => e.pseudo && e.variantes.length);
+
+    // Recalcule des compteurs à partir des pseudos numérotés.
+    const compteurs = {};
+    entrees.forEach(e => {
+      const m = /^([A-ZÉ]+)_(\d+)$/.exec(e.pseudo);
+      if (m) compteurs[m[1]] = Math.max(compteurs[m[1]] || 0, parseInt(m[2], 10));
     });
-    out += "\nignorer:\n";
-    if (ignored.length === 0) out += "  []\n";
-    else ignored.forEach(it => { out += `  - ${yamlQuote(it.texte)}\n`; });
-    out += "\nlocuteurs_generiques:\n";
-    if (generiques.length === 0) out += "  []\n";
-    else generiques.forEach(x => { out += `  - ${yamlQuote(x)}\n`; });
-    out += "\nreglages:\n  seuil_score: 0.5\n";
-    out += `  types: ["PERSON","LOCATION","ORGANIZATION","EMAIL_ADDRESS","PHONE_NUMBER"]\n`;
-    return out;
+
+    return {
+      version: 2,
+      client: base.client || null,
+      compteurs: compteurs,
+      entrees: entrees,
+      ignorer: ignored.map(it => it.texte),
+      locuteurs_generiques: generiques.slice(),
+      reglages: (base.reglages) || { seuil_score: 0.5,
+        types: ["PERSON", "LOCATION", "ORGANIZATION", "EMAIL_ADDRESS", "PHONE_NUMBER"] },
+    };
   }
 
-  async function exportYaml() {
-    // avertir si des pseudos sont incomplets (PERSONNE_? / _X)
-    const bad = groups.filter(g => !/_\d+$/.test(g.pseudo));
-    if (bad.length) {
-      if (!confirm(`${bad.length} groupe(s) ont un pseudo incomplet (ex. PERSONNE_?). `
-        + `Ils seront exportés tels quels. Continuer ?`)) return;
-    }
-    const out = buildYaml();
+  function validerPseudos() {
+    // Validation NON artificielle : on liste nommément les pseudos vides ou en
+    // double. Plus de rejet des pseudos sans _<chiffre> (corrige #8).
+    const vus = {}, vides = [], doublons = [];
+    groups.forEach(g => {
+      const p = (g.pseudo || "").trim();
+      if (!p) { vides.push(g); return; }
+      if (vus[p]) doublons.push(p); else vus[p] = true;
+    });
+    return { vides, doublons };
+  }
 
-    // Mode serveur : ecriture directe du alias.yaml au niveau du perimetre.
+  async function exportMemoire() {
+    const { vides, doublons } = validerPseudos();
+    if (vides.length) {
+      alert(`${vides.length} groupe(s) sans pseudonyme. Renseigne-les avant d'exporter.`);
+      return;
+    }
+    if (doublons.length) {
+      if (!confirm(`Pseudonymes en double : ${[...new Set(doublons)].join(", ")}.\n`
+        + `Leurs variantes seront fusionnées sous le même pseudo. Continuer ?`)) return;
+    }
+    const mem = buildMemoire();
+    const out = JSON.stringify(mem, null, 2);
+
+    // Mode serveur : écriture directe de memoire_client.json au périmètre.
     if (MODE_SERVEUR) {
       try {
         const r = await fetch("/api/export", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ yaml: out }),
+          body: JSON.stringify({ memoire: mem }),
         });
         const res = await r.json();
         if (!r.ok || !res.ok) throw new Error(res.error || ("HTTP " + r.status));
-        alert("alias.yaml enregistré :\n" + res.alias_path);
+        alert("memoire_client.json enregistré :\n" + res.memoire_path);
         return;
       } catch (e) {
         alert("Écriture via le serveur impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement.");
       }
     }
-    // Repli : telechargement classique.
-    const blob = new Blob([out], { type: "text/yaml;charset=utf-8" });
+    // Repli : téléchargement classique.
+    const blob = new Blob([out], { type: "application/json;charset=utf-8" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "alias.yaml"; a.click();
+    a.href = URL.createObjectURL(blob); a.download = "memoire_client.json"; a.click();
     URL.revokeObjectURL(a.href);
   }
-  exportBtn.addEventListener("click", exportYaml);
+  exportBtn.addEventListener("click", exportMemoire);
 
   // ---- Mode serveur : chargement auto + heartbeat ----
   async function serveurInit() {
@@ -475,17 +576,21 @@
     });
     try {
       const man = await (await fetch("/api/manifest")).json();
-      // Pre-remplissage : si un alias existe deja au perimetre, on le charge ;
-      // sinon on part de l'etat de detection.
-      if (man.alias_existe) {
-        const y = await (await fetch("/api/alias")).text();
-        try { loadFromYaml(y); } catch (e) { /* repli etat ci-dessous */ }
+      // Refonte #14/#17 : si une mémoire client existe au périmètre, on la
+      // charge ; puis on FUSIONNE les nouvelles détections de l'état (sans
+      // écraser les regroupements existants). Sinon on initialise depuis l'état.
+      let memoireExiste = false;
+      if (man.memoire_existe) {
+        try {
+          const mem = await (await fetch("/api/memoire")).json();
+          loadFromMemoire(mem);
+          memoireExiste = true;
+        } catch (e) { /* repli état ci-dessous */ }
       }
       if (man.etat) {
         const data = await (await fetch("/api/etat")).json();
-        // Si aucun alias charge, on initialise depuis l'etat. Si un alias a ete
-        // charge, on N'ECRASE PAS (l'utilisateur ré-édite un alias existant).
-        if (!man.alias_existe) loadFromState(data);
+        if (memoireExiste) mergeFromState(data);   // fusion #17
+        else loadFromState(data);
       }
     } catch (e) {
       alert("Chargement depuis le serveur impossible : " + (e && e.message ? e.message : e));
