@@ -42,19 +42,41 @@ d. Coller le token dans `config\.env` (ligne `HUGGINGFACE_TOKEN=`)
 
 (À refaire à chaque nouvelle session de travail.)
 
-## 5. Premier test
+## 5. Installer la commande `ia` (recommandé)
 
-Dépose un fichier audio dans `data\`, puis :
+Pour piloter tous les outils sans retenir de longues lignes de commande :
 
 ```powershell
-python tools\transcription\transcribe.py "data\ton_entretien.m4a"
+.\scripts\installer-ia.ps1
 ```
 
-Les résultats apparaissent dans `data\transcriptions\`.
+Ouvre un **nouveau** terminal, puis :
+
+```powershell
+ia aide
+```
+
+Détails complets : `scripts\GUIDE-USAGE.md`.
+
+## 6. Premier test
+
+Crée un dossier d'entretien, dépose-y un audio, place-toi dedans :
+
+```powershell
+mkdir entretien_test ; cd entretien_test
+# (copie un audio ici)
+ia transcrire
+```
+
+Les résultats apparaissent dans `1_transcription\`. La suite du workflow
+(`ia taguer`, `ia couper`, `ia anonymiser`) est décrite dans le guide d'usage.
+
+> Sans la commande `ia`, tu peux toujours appeler les scripts directement,
+> p. ex. `python tools\transcription\transcribe_robuste.py "entretien.m4a"`.
 
 ---
 
 ## Réinstallation sur une autre machine
 
-Identique : `git clone` → bootstrap → token → c'est tout. Le repo porte la
-recette complète ; seuls le token et les audios sont propres à la machine.
+Identique : `git clone` → bootstrap → token → `installer-ia.ps1`. Le repo porte
+la recette complète ; seuls le token et les audios sont propres à la machine.

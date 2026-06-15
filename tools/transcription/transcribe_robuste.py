@@ -379,6 +379,9 @@ def main():
     ap.add_argument("--compute-type", default=os.getenv("WHISPER_COMPUTE_TYPE", "int8"))
     ap.add_argument("--diarize", action="store_true",
                     help="Diarisation par troncon avec etiquettes locales a reconcilier dans le tagueur")
+    ap.add_argument("--outdir", default=None,
+                    help="Dossier de sortie des livrables (.txt/.srt). Defaut : repertoire courant. "
+                         "L'audio reste cherche dans le repertoire courant.")
     args = ap.parse_args()
 
     # Charger config/.env depuis le repo (pas depuis le repertoire de mission)
@@ -400,18 +403,23 @@ def main():
         print("[ERREUR] --diarize requiert un HUGGINGFACE_TOKEN valide dans config/.env.", file=sys.stderr)
         sys.exit(1)
 
-    # Repertoire de mission = repertoire courant (la ou l'utilisateur a lance le script)
-    deliver_dir = Path.cwd()
-    audios = find_audios(deliver_dir, args.audio)
+    # L'audio est TOUJOURS cherche dans le repertoire courant (la ou l'utilisateur
+    # a lance le script). Les livrables sont ecrits dans --outdir si fourni,
+    # sinon dans le repertoire courant (comportement historique).
+    work_cwd = Path.cwd()
+    deliver_dir = Path(args.outdir).resolve() if args.outdir else work_cwd
+    audios = find_audios(work_cwd, args.audio)
     if not audios:
-        print(f"[INFO] Aucun audio trouve dans {deliver_dir}")
+        print(f"[INFO] Aucun audio trouve dans {work_cwd}")
         print(f"       Extensions reconnues : {', '.join(sorted(AUDIO_EXTS))}")
         sys.exit(0)
 
     t0 = time.time()
     def el(): return f"[{time.time()-t0:7.1f}s]"
 
-    print(f"{el()} Repertoire de mission : {deliver_dir}")
+    print(f"{el()} Repertoire de l'entretien : {work_cwd}")
+    if deliver_dir != work_cwd:
+        print(f"{el()} Livrables ecrits dans : {deliver_dir}")
     print(f"{el()} {len(audios)} audio(s) a traiter : {', '.join(a.name for a in audios)}")
 
     ok_count = 0

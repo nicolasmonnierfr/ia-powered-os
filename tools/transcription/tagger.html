@@ -218,6 +218,9 @@
 <header>
   <h1>Tagueur de locuteurs</h1>
   <div class="file-loaders">
+    <button class="btn" id="openDir" title="Ouvre (ou recharge) le dossier racine de l'entretien : charge l'audio + le .srt et prepare l'export vers 2_coupe">Ouvrir le dossier de l'entretien</button>
+    <button class="btn btn-ghost" id="changeDir" title="Choisir un autre dossier d'entretien">Changer</button>
+    <span id="dirStatus" style="font-size:12px;color:var(--ink-faint);"></span>
     <label class="loader">Audio <input type="file" id="audioFile" accept="audio/*,video/*"></label>
     <label class="loader">Transcription .srt <input type="file" id="srtFile" accept=".srt,.vtt,text/plain"></label>
   </div>
@@ -282,9 +285,10 @@
     <span class="help-toggle" id="helpToggle">Raccourcis ?</span>
     <button class="btn btn-ghost" id="reconcileReopen">Réconcilier</button>
     <button class="btn btn-ghost" id="renameBtns"></button>
-    <button class="btn" id="exportTxt">Exporter .txt</button>
-    <button class="btn" id="exportSrt">Exporter .srt</button>
-    <button class="btn" id="exportCut" title="Plan de coupe pour reconstruire l'audio raccourci">Exporter plan de coupe</button>
+    <button class="btn" id="exportAll" title="Ecrit plan + .srt + .txt coherents dans le dossier 2_coupe (Chrome/Edge)">Exporter vers 2_coupe</button>
+    <button class="btn btn-ghost" id="exportTxt">.txt</button>
+    <button class="btn btn-ghost" id="exportSrt">.srt</button>
+    <button class="btn btn-ghost" id="exportCut" title="Plan de coupe pour reconstruire l'audio raccourci">plan</button>
   </div>
 </footer>
 
@@ -883,10 +887,13 @@
   });
 
   let audioFileName = null;
+  function setAudioFromBlob(blob, name) {
+    audioFileName = name;
+    player.src = URL.createObjectURL(blob);
+  }
   document.getElementById("audioFile").addEventListener("change", (e) => {
     const f = e.target.files[0]; if (!f) return;
-    audioFileName = f.name;
-    player.src = URL.createObjectURL(f);
+    setAudioFromBlob(f, f.name);
   });
   // Detecte si les etiquettes sont LOCALES par troncon (format T{n}-{lettre})
   function areLocalLabels(labels) {
@@ -894,56 +901,233 @@
     return labels.every(l => /^T\d+-/.test(l));
   }
 
-  document.getElementById("srtFile").addEventListener("change", (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const parsed = parseSRT(reader.result);
-      segments = parsed.segments;
-      const labels = parsed.labels;
+  // Charge un transcript .srt depuis son TEXTE (reutilise par l'input file et
+  // par l'ouverture de dossier).
+  function loadSrtText(text) {
+    const parsed = parseSRT(text);
+    segments = parsed.segments;
+    const labels = parsed.labels;
 
-      if (labels.length > 0 && areLocalLabels(labels)) {
-        // Etiquettes locales par troncon -> mode reconciliation manuel
-        selected = segments.length ? 0 : -1;
-        lastPlaying = -1;
-        render();
-        if (selected >= 0) select(0, false);
-        openReconcile(labels);
-        return;
-      }
-
-      // Pre-remplissage direct depuis une diarisation simple (SPEAKER_xx, etc.)
-      if (labels.length > 0) {
-        const usable = Math.min(labels.length, MAX);
-        const targetN = Math.max(2, usable);
-        nSpeakers = targetN;
-        document.getElementById("speakerCount").value = String(targetN);
-        const map = {};
-        labels.forEach((lab, idx) => { if (idx < MAX) map[lab] = idx; });
-        let dropped = 0, prevSpeaker = null;
-        for (const seg of segments) {
-          if (seg.label && map[seg.label] !== undefined) {
-            seg.speaker = map[seg.label];
-            seg.turnStart = (seg.speaker !== prevSpeaker);
-            prevSpeaker = seg.speaker;
-          } else {
-            seg.speaker = null; seg.turnStart = false; prevSpeaker = null;
-            if (seg.label) dropped++;
-          }
-        }
-        buildControls();
-        if (labels.length > MAX) {
-          alert(`Le fichier contient ${labels.length} locuteurs. L'outil en gère ${MAX} au maximum ; les segments des locuteurs supplémentaires sont laissés en « non affecté » (${dropped} segment(s)).`);
-        }
-      }
-
+    if (labels.length > 0 && areLocalLabels(labels)) {
+      // Etiquettes locales par troncon -> mode reconciliation manuel
       selected = segments.length ? 0 : -1;
       lastPlaying = -1;
       render();
       if (selected >= 0) select(0, false);
-    };
+      openReconcile(labels);
+      return;
+    }
+
+    // Pre-remplissage direct depuis une diarisation simple (SPEAKER_xx, etc.)
+    if (labels.length > 0) {
+      const usable = Math.min(labels.length, MAX);
+      const targetN = Math.max(2, usable);
+      nSpeakers = targetN;
+      document.getElementById("speakerCount").value = String(targetN);
+      const map = {};
+      labels.forEach((lab, idx) => { if (idx < MAX) map[lab] = idx; });
+      let dropped = 0, prevSpeaker = null;
+      for (const seg of segments) {
+        if (seg.label && map[seg.label] !== undefined) {
+          seg.speaker = map[seg.label];
+          seg.turnStart = (seg.speaker !== prevSpeaker);
+          prevSpeaker = seg.speaker;
+        } else {
+          seg.speaker = null; seg.turnStart = false; prevSpeaker = null;
+          if (seg.label) dropped++;
+        }
+      }
+      buildControls();
+      if (labels.length > MAX) {
+        alert(`Le fichier contient ${labels.length} locuteurs. L'outil en gère ${MAX} au maximum ; les segments des locuteurs supplémentaires sont laissés en « non affecté » (${dropped} segment(s)).`);
+      }
+    }
+
+    selected = segments.length ? 0 : -1;
+    lastPlaying = -1;
+    render();
+    if (selected >= 0) select(0, false);
+  }
+
+  document.getElementById("srtFile").addEventListener("change", (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => loadSrtText(reader.result);
     reader.readAsText(f, "utf-8");
   });
+
+  // =========================================================================
+  // MODE SERVEUR (lance par taguer.ps1 via serveur_tagueur.py).
+  // Detecte si la page est servie en http://127.0.0.1 / localhost. Si oui :
+  //  - charge l'audio + le .srt automatiquement via les routes /api/...
+  //  - exporte via POST /api/export (ecriture directe dans 2_coupe/)
+  //  - envoie un heartbeat /api/ping (la fermeture de l'onglet arrete le serveur)
+  // Sinon : mode fichier classique (inputs + File System Access API en repli).
+  // =========================================================================
+  const MODE_SERVEUR = /^https?:$/.test(location.protocol) &&
+                       /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+
+  async function serveurChargerEntretien() {
+    try {
+      const man = await (await fetch("/api/manifest")).json();
+      // Audio
+      if (man.audio) {
+        const blob = await (await fetch("/api/audio")).blob();
+        setAudioFromBlob(blob, man.audio);
+      }
+      // SRT
+      if (man.srt) {
+        const txt = await (await fetch("/api/srt")).text();
+        loadSrtText(txt);
+      }
+      const a = man.audio ? `audio: ${man.audio}` : "audio: introuvable";
+      const s = man.srt ? `srt: ${man.srt}` : "srt: introuvable";
+      setDirStatus(`Entretien chargé (${a}, ${s})`, !!(man.audio && man.srt));
+      if (!man.audio) alert("Aucun audio trouvé à la racine du dossier d'entretien.");
+      if (!man.srt)  alert("Aucun .srt trouvé (ni dans 1_transcription\\, ni à la racine).");
+    } catch (e) {
+      setDirStatus("Erreur de chargement depuis le serveur : " + (e && e.message ? e.message : e), false);
+    }
+  }
+
+  async function serveurExporter(files) {
+    // files : objet {nom: contenu}. Retourne true si OK.
+    const obj = {};
+    files.forEach(([name, content]) => { obj[name] = content; });
+    const r = await fetch("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: obj }),
+    });
+    const res = await r.json();
+    if (!r.ok || !res.ok) throw new Error(res.error || ("HTTP " + r.status));
+    return res;
+  }
+
+  function demarrerHeartbeat() {
+    const ping = () => { fetch("/api/ping", { method: "POST" }).catch(() => {}); };
+    ping();
+    setInterval(ping, 5000);   // < GRACE_SEC cote serveur (15s)
+  }
+
+  // Le dossier racine de l'entretien est memorise (IndexedDB) et sert a la
+  // fois a CHARGER (audio racine + .srt dans 1_transcription\) et a EXPORTER
+  // (ecriture directe dans 2_coupe\). Repli : inputs file ci-dessus.
+  // =========================================================================
+  const AUDIO_EXTS = ["m4a","mp3","wav","mp4","mkv","webm","flac","ogg","aac","wma","opus"];
+  let entretienDirHandle = null;   // handle du dossier racine (pour l'export)
+
+  // --- Mini-store IndexedDB pour persister le handle entre sessions ---
+  function idbDir(mode) {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("tagger-fs", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("handles");
+      r.onsuccess = () => res(r.result.transaction("handles", mode).objectStore("handles"));
+      r.onerror = () => rej(r.error);
+    });
+  }
+  async function saveHandle(h) {
+    try { const s = await idbDir("readwrite"); s.put(h, "entretien"); } catch (e) { /* non bloquant */ }
+  }
+  async function loadHandle() {
+    try {
+      const s = await idbDir("readonly");
+      return await new Promise((res) => { const g = s.get("entretien"); g.onsuccess = () => res(g.result || null); g.onerror = () => res(null); });
+    } catch (e) { return null; }
+  }
+
+  async function ensurePermission(handle, mode) {
+    const opts = { mode };
+    if ((await handle.queryPermission(opts)) === "granted") return true;
+    return (await handle.requestPermission(opts)) === "granted";
+  }
+
+  function setDirStatus(msg, ok) {
+    const el = document.getElementById("dirStatus");
+    el.textContent = msg;
+    el.style.color = ok ? "var(--ok, #2a7)" : "var(--ink-faint)";
+  }
+
+  // Charge audio + srt depuis un handle de dossier deja autorise.
+  async function loadFromDir(dirHandle) {
+    entretienDirHandle = dirHandle;
+    let audioName = null, audioBlob = null, srtText = null, srtName = null;
+
+    // 1. Audio : premier fichier audio a la RACINE.
+    for await (const [name, h] of dirHandle.entries()) {
+      if (h.kind !== "file") continue;
+      const ext = (name.split(".").pop() || "").toLowerCase();
+      if (AUDIO_EXTS.includes(ext)) { audioName = name; audioBlob = await h.getFile(); break; }
+    }
+
+    // 2. .srt : d'abord dans 1_transcription\, sinon a la racine.
+    async function findSrtIn(handle) {
+      for await (const [name, h] of handle.entries()) {
+        if (h.kind === "file" && name.toLowerCase().endsWith(".srt")) {
+          return { name, text: await (await h.getFile()).text() };
+        }
+      }
+      return null;
+    }
+    try {
+      const sub = await dirHandle.getDirectoryHandle("1_transcription");
+      const found = await findSrtIn(sub);
+      if (found) { srtName = found.name; srtText = found.text; }
+    } catch (e) { /* pas de sous-dossier : on tentera la racine */ }
+    if (!srtText) {
+      const found = await findSrtIn(dirHandle);
+      if (found) { srtName = found.name; srtText = found.text; }
+    }
+
+    if (audioBlob) setAudioFromBlob(audioBlob, audioName);
+    if (srtText)  loadSrtText(srtText);
+
+    const parts = [];
+    parts.push(audioName ? `audio: ${audioName}` : "audio: introuvable");
+    parts.push(srtText ? `srt: ${srtName}` : "srt: introuvable");
+    setDirStatus("Dossier ouvert (" + parts.join(", ") + ")", !!(audioBlob && srtText));
+    if (!audioBlob) alert("Aucun audio trouve a la racine du dossier choisi.");
+    if (!srtText)  alert("Aucun .srt trouve (ni dans 1_transcription\\, ni a la racine).");
+  }
+
+  async function pickNewDir() {
+    const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+    if (!(await ensurePermission(dir, "readwrite"))) { alert("Autorisation refusee."); return; }
+    await saveHandle(dir);
+    await loadFromDir(dir);
+  }
+
+  document.getElementById("openDir").addEventListener("click", async () => {
+    if (!window.showDirectoryPicker) {
+      alert("Ce navigateur ne gere pas l'ouverture de dossier.\nUtilise les champs Audio et Transcription .srt a cote.");
+      return;
+    }
+    try {
+      // Reutiliser le dossier memorise (sans re-naviguer) si possible.
+      const remembered = await loadHandle();
+      if (remembered && (await ensurePermission(remembered, "readwrite"))) {
+        await loadFromDir(remembered);
+        return;
+      }
+      await pickNewDir();
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      alert("Ouverture impossible : " + (e && e.message ? e.message : e));
+    }
+  });
+
+  document.getElementById("changeDir").addEventListener("click", async () => {
+    if (!window.showDirectoryPicker) return;
+    try { await pickNewDir(); }
+    catch (e) { if (e && e.name !== "AbortError") alert("Ouverture impossible : " + (e && e.message ? e.message : e)); }
+  });
+
+  // Au chargement de la page : proposer de reutiliser le dernier dossier.
+  (async () => {
+    if (!window.showDirectoryPicker) return;
+    const h = await loadHandle();
+    if (h) setDirStatus("Dossier memorise disponible — clique « Ouvrir le dossier » pour le recharger.", false);
+  })();
 
   // Renommage : un seul bouton qui demande tous les noms actifs
   document.getElementById("renameBtns").textContent = "Renommer les locuteurs";
@@ -1035,17 +1219,23 @@
     return { kept, keepIntervals, cutIntervals };
   }
 
-  document.getElementById("exportTxt").addEventListener("click", () => {
-    if (segments.length === 0) return;
+  // --- Builders purs : produisent le CONTENU (reutilises par les exports
+  //     individuels ET par l'export groupe, pour garantir la coherence). ---
+  function stemFromAudio() {
+    if (!audioFileName) return "transcription_taggee";
+    return audioFileName.replace(/\.[^.]+$/, "");
+  }
+
+  function buildTxt() {
     const { kept } = buildCompactTimeline();
-    if (kept.length === 0) { alert("Tous les segments sont coupés : rien à exporter."); return; }
+    if (kept.length === 0) return null;
     let out = "", cur;
     for (const seg of kept) {
       if (seg.speaker !== cur) { out += `\n[${speakerName(seg.speaker)}] (${fmt(seg.start)})\n`; cur = seg.speaker; }
       out += seg.text + " ";
     }
-    download("transcription_taggee.txt", out.trim() + "\n");
-  });
+    return out.trim() + "\n";
+  }
 
   function srtTime(t) {
     const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
@@ -1053,27 +1243,25 @@
     const p = (n, l) => String(n).padStart(l, "0");
     return `${p(h,2)}:${p(m,2)}:${p(s,2)},${p(ms,3)}`;
   }
-  document.getElementById("exportSrt").addEventListener("click", () => {
-    if (segments.length === 0) return;
+
+  function buildSrt() {
     const { kept } = buildCompactTimeline();
-    if (kept.length === 0) { alert("Tous les segments sont coupés : rien à exporter."); return; }
+    if (kept.length === 0) return null;
     let out = "";
     kept.forEach((seg, i) => {
       out += `${i + 1}\n${srtTime(seg.start)} --> ${srtTime(seg.end)}\n[${speakerName(seg.speaker)}] ${seg.text}\n\n`;
     });
-    download("transcription_taggee.srt", out);
-  });
+    return out;
+  }
 
-  // Export du plan de coupe (JSON) : source de verite pour couper_audio.py
-  document.getElementById("exportCut").addEventListener("click", () => {
-    if (segments.length === 0) return;
+  function buildPlan(allowEmptyCut) {
     const { keepIntervals, cutIntervals } = buildCompactTimeline();
-    if (cutIntervals.length === 0) {
-      if (!confirm("Aucun segment marqué « à couper ». Exporter quand même un plan qui garde tout l'audio ?")) return;
+    if (cutIntervals.length === 0 && !allowEmptyCut) {
+      if (!confirm("Aucun segment marqué « à couper ». Exporter quand même un plan qui garde tout l'audio ?")) return null;
     }
     const keptDur = keepIntervals.reduce((a, i) => a + (i.end - i.start), 0);
     const cutDur = cutIntervals.reduce((a, i) => a + (i.end - i.start), 0);
-    const plan = {
+    return JSON.stringify({
       version: 1,
       generated_by: "tagger.html",
       generated_at: new Date().toISOString(),
@@ -1083,8 +1271,99 @@
       cut_intervals: cutIntervals.map(i => ({ start: +i.start.toFixed(3), end: +i.end.toFixed(3) })),
       kept_duration_sec: +keptDur.toFixed(3),
       cut_duration_sec: +cutDur.toFixed(3)
-    };
-    download("plan_de_coupe.json", JSON.stringify(plan, null, 2));
+    }, null, 2);
+  }
+
+  // --- Exports individuels (repli / usage ponctuel) ---
+  document.getElementById("exportTxt").addEventListener("click", () => {
+    if (segments.length === 0) return;
+    const c = buildTxt();
+    if (c === null) { alert("Tous les segments sont coupés : rien à exporter."); return; }
+    download(`${stemFromAudio()}_coupe.txt`, c);
+  });
+  document.getElementById("exportSrt").addEventListener("click", () => {
+    if (segments.length === 0) return;
+    const c = buildSrt();
+    if (c === null) { alert("Tous les segments sont coupés : rien à exporter."); return; }
+    download(`${stemFromAudio()}_coupe.srt`, c);
+  });
+  document.getElementById("exportCut").addEventListener("click", () => {
+    if (segments.length === 0) return;
+    const c = buildPlan(false);
+    if (c === null) return;
+    download("plan_de_coupe.json", c);
+  });
+
+  // --- Export groupe vers le dossier 2_coupe (File System Access API) ---
+  // Ecrit les 3 fichiers d'un seul coup, depuis le MEME etat de tagging, donc
+  // toujours coherents entre eux. Sur Chrome/Edge : choix du dossier 2_coupe et
+  // ecriture directe. Repli (autre navigateur / refus) : 3 telechargements.
+  async function writeFileInDir(dirHandle, name, content) {
+    const fh = await dirHandle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(content);
+    await w.close();
+  }
+
+  document.getElementById("exportAll").addEventListener("click", async () => {
+    if (segments.length === 0) { alert("Charge d'abord une transcription."); return; }
+    const txt = buildTxt();
+    const srt = buildSrt();
+    if (txt === null || srt === null) { alert("Tous les segments sont coupés : rien à exporter."); return; }
+    const plan = buildPlan(true);   // export groupe : pas de confirmation bloquante
+    const stem = stemFromAudio();
+    const files = [
+      ["plan_de_coupe.json", plan],
+      [`${stem}_coupe.srt`, srt],
+      [`${stem}_coupe.txt`, txt],
+    ];
+
+    // Cas privilegie 1 : mode serveur -> POST direct, ecriture dans 2_coupe/.
+    if (MODE_SERVEUR) {
+      try {
+        await serveurExporter(files);
+        alert(`Exporté dans 2_coupe\\ :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt`);
+        return;
+      } catch (e) {
+        alert("Export via le serveur impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement.");
+        for (const [name, content] of files) download(name, content);
+        return;
+      }
+    }
+
+    // Cas privilegie 2 : un dossier d'entretien est ouvert -> ecrire dans 2_coupe\
+    // sans aucune nouvelle selection.
+    let dirHandle = entretienDirHandle;
+    if (!dirHandle && window.showDirectoryPicker) {
+      const remembered = await loadHandle();
+      if (remembered && (await ensurePermission(remembered, "readwrite"))) dirHandle = remembered;
+    }
+
+    if (dirHandle) {
+      try {
+        const coupe = await dirHandle.getDirectoryHandle("2_coupe", { create: true });
+        for (const [name, content] of files) await writeFileInDir(coupe, name, content);
+        alert(`Exporté dans 2_coupe\\ :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt`);
+        return;
+      } catch (e) {
+        alert("Ecriture dans 2_coupe impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement classique.");
+      }
+    } else if (window.showDirectoryPicker) {
+      // Pas de dossier ouvert : laisser choisir une destination ponctuelle.
+      try {
+        const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+        for (const [name, content] of files) await writeFileInDir(dir, name, content);
+        alert(`Exporté dans le dossier choisi :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt`);
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        alert("Ecriture directe impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement classique.");
+      }
+    } else {
+      alert("Ce navigateur ne permet pas l'écriture directe dans un dossier.\nRepli : les 3 fichiers vont être téléchargés.");
+    }
+    // Repli : telechargements (a ranger ensuite dans 2_coupe).
+    for (const [name, content] of files) download(name, content);
   });
 
   document.getElementById("helpToggle").addEventListener("click", () => {
@@ -1199,6 +1478,14 @@
 
   // Init
   buildControls();
+
+  // Mode serveur : auto-chargement de l'entretien + heartbeat. On masque les
+  // boutons d'ouverture manuelle (inutiles : tout vient du serveur).
+  if (MODE_SERVEUR) {
+    ["openDir", "changeDir"].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = "none"; });
+    demarrerHeartbeat();
+    serveurChargerEntretien();
+  }
 })();
 </script>
 

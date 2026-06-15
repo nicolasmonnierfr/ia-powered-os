@@ -21,9 +21,9 @@ cd IA-Powered-OS
 IA-Powered-OS/
 ├── bootstrap/        Scripts d'installation (prérequis système, venv)
 ├── tools/            Outils métier exécutables
-│   ├── transcription/  Transcription d'entretiens (WhisperX) + tagueur
-│   └── anonymisation/  Anonymisation locale des transcripts (Presidio)
-├── scripts/          Glue technique, lanceurs, utilitaires courts
+│   ├── transcription/  Transcription d'entretiens (WhisperX) + tagueur + serveur
+│   └── anonymisation/  Anonymisation locale des transcripts (Presidio) + éditeur + serveur
+├── scripts/          Commande `ia` + wrappers (industrialisation du pipeline)
 ├── config/           Modèles de configuration (.env.example)
 ├── data/             Données locales (gitignoré : intermédiaires .chunks/)
 └── requirements.txt  Dépendances Python
@@ -47,6 +47,13 @@ IA-Powered-OS/
 |-------|-------------|------|
 | `tools/transcription` | Transcription + diarisation d'entretiens (WhisperX, local) + tagueur | En cours |
 | `tools/anonymisation` | Anonymisation locale des transcripts (Presidio/spaCy FR) avec pseudonymes cohérents et table de correspondance réutilisable | En cours |
+
+## Commande `ia` (industrialisation)
+
+Le pipeline complet se pilote via une commande unique, lancée **depuis le
+dossier d'un entretien** : `ia transcrire`, `ia taguer`, `ia couper`,
+`ia anonymiser detecter` / `appliquer`. Installation : `.\scripts\installer-ia.ps1`.
+Voir `scripts/GUIDE-USAGE.md`.
 
 > L'orchestration par Claude Code (pilotage automatique du pipeline) sera
 > ajoutée ultérieurement, sous `.claude/skills/`.

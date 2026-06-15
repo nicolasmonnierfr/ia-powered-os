@@ -136,6 +136,12 @@
   const statsEl = document.getElementById("stats");
   const exportBtn = document.getElementById("exportYaml");
 
+  // Mode serveur (lance par anonymiser.ps1 via serveur_editeur.py) : sert
+  // l'editeur et fournit l'etat.json + l'alias existant ; ecrit l'alias au
+  // niveau du perimetre. Sinon : mode fichier classique (inputs).
+  const MODE_SERVEUR = /^https?:$/.test(location.protocol) &&
+                       /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+
   function nextId() { return "g" + (uid++); }
 
   // ---- Chargement de l'état de détection ----
@@ -404,7 +410,7 @@
     // toujours quoter pour gérer accents, espaces, ponctuation
     return '"' + String(s).replace(/"/g, '\\"') + '"';
   }
-  function exportYaml() {
+  function buildYaml() {
     // dédupliquer les pseudos identiques en fusionnant leurs variantes
     let out = "# alias.yaml — généré par editeur_alias.html\n";
     if (transcriptName) out += `# Transcript de référence : ${transcriptName}\n`;
@@ -422,19 +428,70 @@
     else generiques.forEach(x => { out += `  - ${yamlQuote(x)}\n`; });
     out += "\nreglages:\n  seuil_score: 0.5\n";
     out += `  types: ["PERSON","LOCATION","ORGANIZATION","EMAIL_ADDRESS","PHONE_NUMBER"]\n`;
+    return out;
+  }
 
+  async function exportYaml() {
     // avertir si des pseudos sont incomplets (PERSONNE_? / _X)
     const bad = groups.filter(g => !/_\d+$/.test(g.pseudo));
     if (bad.length) {
       if (!confirm(`${bad.length} groupe(s) ont un pseudo incomplet (ex. PERSONNE_?). `
         + `Ils seront exportés tels quels. Continuer ?`)) return;
     }
+    const out = buildYaml();
+
+    // Mode serveur : ecriture directe du alias.yaml au niveau du perimetre.
+    if (MODE_SERVEUR) {
+      try {
+        const r = await fetch("/api/export", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ yaml: out }),
+        });
+        const res = await r.json();
+        if (!r.ok || !res.ok) throw new Error(res.error || ("HTTP " + r.status));
+        alert("alias.yaml enregistré :\n" + res.alias_path);
+        return;
+      } catch (e) {
+        alert("Écriture via le serveur impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement.");
+      }
+    }
+    // Repli : telechargement classique.
     const blob = new Blob([out], { type: "text/yaml;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "alias.yaml"; a.click();
     URL.revokeObjectURL(a.href);
   }
   exportBtn.addEventListener("click", exportYaml);
+
+  // ---- Mode serveur : chargement auto + heartbeat ----
+  async function serveurInit() {
+    // Heartbeat (la fermeture de l'onglet arrete le serveur).
+    const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
+    ping(); setInterval(ping, 5000);
+    // Masquer les inputs de chargement manuel (tout vient du serveur).
+    ["stateFile", "aliasFile"].forEach(id => {
+      const e = document.getElementById(id);
+      if (e && e.closest("label")) e.closest("label").style.display = "none";
+    });
+    try {
+      const man = await (await fetch("/api/manifest")).json();
+      // Pre-remplissage : si un alias existe deja au perimetre, on le charge ;
+      // sinon on part de l'etat de detection.
+      if (man.alias_existe) {
+        const y = await (await fetch("/api/alias")).text();
+        try { loadFromYaml(y); } catch (e) { /* repli etat ci-dessous */ }
+      }
+      if (man.etat) {
+        const data = await (await fetch("/api/etat")).json();
+        // Si aucun alias charge, on initialise depuis l'etat. Si un alias a ete
+        // charge, on N'ECRASE PAS (l'utilisateur ré-édite un alias existant).
+        if (!man.alias_existe) loadFromState(data);
+      }
+    } catch (e) {
+      alert("Chargement depuis le serveur impossible : " + (e && e.message ? e.message : e));
+    }
+  }
+  if (MODE_SERVEUR) serveurInit();
 
 })();
 </script>

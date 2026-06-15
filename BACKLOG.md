@@ -338,35 +338,56 @@ re-run involontaire.
 
 ---
 
-## Industrialisation / automatisation
+## Fait
 
-### 4. Scripts wrapper pour éviter les longues lignes de commande
-**Besoin** : aujourd'hui chaque étape demande une commande longue et précise
-(chemins, `--alias`, `--table`, `--client`…). C'est source d'erreurs et pénible
-à taper. Industrialiser le process avec des scripts qui enchaînent et
-simplifient.
+### 4. Scripts wrapper + commande `ia` (15/06/2026)
+Industrialisation du pipeline réalisée. Commande unique `ia` (dispatcher +
+fonction de profil PowerShell), wrappers `transcrire` / `taguer` / `couper` /
+`anonymiser` dans `scripts/`. Arborescence constante par entretien
+(`1_transcription/`, `2_coupe/`, `3_anonymisation/`). alias + table partagés au
+niveau d'un « périmètre » trouvé par **recherche ascendante**. Les wrappers
+ciblent le `python.exe` du venv en absolu (plus besoin d'activer le venv ;
+`ia setenv` le fait à la demande). Voir `scripts/GUIDE-USAGE.md`.
 
-**Pistes à cadrer** :
-- **Scripts d'entrée courts** (un par usage) dans `scripts/` (dossier déjà
-  prévu, vide) ou `bootstrap/`. Sous Windows : `.ps1` ou `.bat`. Ex :
-  - `transcrire.ps1 <audio>` → lance `transcribe.py` avec les bons réglages.
-  - `couper.ps1 <plan>` → lance `couper_audio.py`.
-  - `anonymiser.ps1 <transcript> <client>` → enchaîne `detecter.py` →
-    (pause pour validation éditeur/CLI) → `appliquer.py`.
-- **Pipeline anonymisation semi-automatique** : un seul script qui fait
-  détection, ouvre l'éditeur HTML (ou lance la CLI), attend le `alias.yaml`,
-  puis applique. Gérer le point d'arrêt « validation humaine » proprement.
-- **Conventions de dossiers** : définir où vivent audios / transcripts / tables
-  par client (ex. `data/<client>/`) pour que les scripts déduisent les chemins
-  et réutilisent automatiquement la `table_correspondance.json` du client.
-- **Découverte automatique** : un script qui détecte le dernier `.srt` / le
-  `plan_de_coupe.json` dans le dossier courant pour éviter de taper les noms.
-
-**À décider** : jusqu'où automatiser sans masquer ce qui se passe (garder des
-messages clairs et des points de contrôle, surtout pour l'anonymisation où une
-erreur = fuite de données).
+Évolutions de fond apportées au passage :
+- `transcribe_robuste.py` : option `--outdir` (rétrocompatible).
+- `tagger.html` : mode serveur (chargement auto audio + srt, export groupé
+  cohérent vers `2_coupe/`, heartbeat) + repli File System Access API / fichier.
+- `editeur_alias.html` : mode serveur (chargement auto etat/alias, écriture de
+  l'alias au périmètre, heartbeat) + repli fichier.
+- Nouveaux : `serveur_tagueur.py`, `serveur_editeur.py` (serveurs locaux
+  127.0.0.1, arrêt par heartbeat à la fermeture de l'onglet).
 
 ---
 
-## Fait
-*(rien pour l'instant — y déplacer les items traités, avec la date)*
+## Industrialisation / automatisation (suite)
+
+### 15. `entretien.json` — fichier d'état par entretien
+**Besoin** : un petit JSON à la racine de chaque entretien décrivant l'état
+d'avancement (audio, étapes faites/à faire, dates), lu et mis à jour par chaque
+outil. Sert de mémoire de progression et de socle à une future orchestration
+(Claude Code). Discuté le 15/06/2026, reporté au backlog pour un chantier dédié.
+
+**À cadrer** : schéma (comme `SCHEMA.md`), qui écrit quoi et quand, intégration
+dans chaque wrapper + les deux serveurs, affichage de l'état dans les éditeurs.
+
+### 16. Serveur tagueur — support des Range requests (lecture audio)
+**Besoin** : `serveur_tagueur.py` sert l'audio en bloc (`Accept-Ranges: none`).
+Sur de gros fichiers, le *seek* dans `<audio controls>` peut être limité.
+**Piste** : implémenter les requêtes HTTP `Range` (206 Partial Content) dans le
+serveur. À valider d'abord sur un vrai entretien : peut-être inutile selon le
+format. Identifié le 15/06/2026.
+
+### 17. Éditeur d'alias — fusion alias existant + nouvelles détections
+**Constat** : en mode serveur, si un `alias.yaml` existe déjà au périmètre, on
+le charge **sans** y fusionner les entités nouvellement détectées dans le
+nouvel entretien (l'éditeur ne sait pas fusionner ; il charge l'un OU l'autre).
+**Conséquence** : pour un nouvel entretien sur un périmètre existant, les
+nouvelles entités ne remontent pas automatiquement dans l'éditeur.
+**Piste** : fusionner `loadFromYaml` (alias existant) et `loadFromState`
+(nouvelles détections) sans doublon. Lié à l'item #14 (modèle de persistance).
+Identifié le 15/06/2026.
+
+---
+
+
