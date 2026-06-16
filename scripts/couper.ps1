@@ -68,9 +68,15 @@ $output = Join-Path $coupeDir "$stem`_coupe$ext"
 
 # --- Execution ---------------------------------------------------------------
 $pyArgs = @($outil, $planFile.FullName, "--audio", $audioFile.FullName, "--output", $output)
+$ctx = Start-Etape -Etape "coupe" -Details @{ plan = $planFile.Name }
 Write-Info "Reencodage en cours (precis a la milliseconde)..."
-& $python @pyArgs
-if ($LASTEXITCODE -ne 0) { Write-Echec "La coupe a echoue (code $LASTEXITCODE)."; exit $LASTEXITCODE }
+Write-Info "Log detaille : $($ctx.LogFile)"
+$code = Invoke-Logge -Contexte $ctx -Exe $python -Arguments $pyArgs
+if ($code -ne 0) {
+    Complete-Etape -Contexte $ctx -Statut "echec" -Message "couper_audio.py a renvoye le code $code"
+    Write-Echec "La coupe a echoue (code $code). Voir le log : $($ctx.LogFile)"
+    exit $code
+}
 
 # --- Rangement du plan + verification ----------------------------------------
 # Si le plan etait a la racine, on le deplace dans 2_coupe\ pour tout regrouper.
@@ -80,9 +86,11 @@ if ($planFile.DirectoryName -eq (Get-EntretienRoot)) {
 }
 
 if (Test-Path -LiteralPath $output) {
+    Complete-Etape -Contexte $ctx -Statut "fait"
     Write-Ok "Audio coupe ecrit dans 2_coupe\"
     Write-Info "  $stem`_coupe$ext"
     Write-Avert "Verifie que 2_coupe\ contient aussi $stem`_coupe.srt et $stem`_coupe.txt (exportes par le tagueur)."
 } else {
-    Write-Avert "Audio coupe attendu non trouve. Verifie les messages ci-dessus."
+    Complete-Etape -Contexte $ctx -Statut "echec" -Message "Audio coupe non produit"
+    Write-Avert "Audio coupe attendu non trouve. Voir le log : $($ctx.LogFile)"
 }

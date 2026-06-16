@@ -374,6 +374,25 @@ acceptés (migration à la volée) ; `migrer.py` convertit définitivement.
 > PowerShell) et l'éditeur en mode serveur (Chrome + serveur_editeur.py).
 
 
+### 15. `entretien.json` + logging centralisé (16/06/2026)
+Fichier projet `entretien.json` à la racine de chaque entretien
+(statut/horodatage/durée par étape + chemin du log), schéma documenté dans
+`scripts/SCHEMA-entretien.md`. Logging à deux niveaux : log verbeux centralisé
+dans `<repo>/logs/` (capture stdout+stderr, affichage temps réel via
+`Tee-Object`), résumé dans `entretien.json`. **Tous** les wrappers instrumentés
+(`transcrire`, `taguer`, `couper`, et `anonymiser` pour ses trois sous-actions
+`detecter`/`appliquer`/`repersonnaliser`) ; nouvelle commande `ia etat`.
+Déclencheur : un run nocturne échoué et indébogable (terminal fermé, aucune trace).
+
+Limite connue (acceptée) : écriture de `entretien.json` sans verrou — sûr en
+usage séquentiel.
+
+Détail `anonymiser` : les trois sous-actions loggent sous l'étape
+`anonymisation` (`details.sous_etape`). `appliquer` porte le statut final
+(`fait`/`echec`) ; `detecter` laisse `en_cours` (validation humaine à suivre) ;
+`repersonnaliser` (post-traitement inverse #12) est tracé sans redéfinir
+l'avancement du cycle. La dette de fusion #14↔#15 est ainsi résolue.
+
 ### 4. Scripts wrapper + commande `ia` (15/06/2026)
 Industrialisation du pipeline réalisée. Commande unique `ia` (dispatcher +
 fonction de profil PowerShell), wrappers `transcrire` / `taguer` / `couper` /
@@ -395,15 +414,6 @@ ciblent le `python.exe` du venv en absolu (plus besoin d'activer le venv ;
 ---
 
 ## Industrialisation / automatisation (suite)
-
-### 15. `entretien.json` — fichier d'état par entretien
-**Besoin** : un petit JSON à la racine de chaque entretien décrivant l'état
-d'avancement (audio, étapes faites/à faire, dates), lu et mis à jour par chaque
-outil. Sert de mémoire de progression et de socle à une future orchestration
-(Claude Code). Discuté le 15/06/2026, reporté au backlog pour un chantier dédié.
-
-**À cadrer** : schéma (comme `SCHEMA.md`), qui écrit quoi et quand, intégration
-dans chaque wrapper + les deux serveurs, affichage de l'état dans les éditeurs.
 
 ### 16. Serveur tagueur — support des Range requests (lecture audio)
 **Besoin** : `serveur_tagueur.py` sert l'audio en bloc (`Accept-Ranges: none`).

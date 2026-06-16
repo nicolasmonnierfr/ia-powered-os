@@ -11,6 +11,7 @@
 #   ia analyser          # detection NER + editeur (ecrit memoire_client.json)
 #   ia anonymiser        # applique le remplacement -> transcript anonymise
 #   ia repersonnaliser [-Rapport f] [-Court]   # reinjecte les vrais noms (#12)
+#   ia etat              # affiche l'avancement de l'entretien courant
 #   ia setenv            # active le venv dans la session courante (python/pip)
 #   ia aide              # affiche cette aide
 #
@@ -40,6 +41,7 @@ function Show-Aide {
     Write-Host "  ia analyser                      " -NoNewline -ForegroundColor Green; Write-Host "Detection NER + editeur -> memoire_client.json"
     Write-Host "  ia anonymiser                    " -NoNewline -ForegroundColor Green; Write-Host "Applique le remplacement -> 3_anonymisation\"
     Write-Host "  ia repersonnaliser [-Rapport f]  " -NoNewline -ForegroundColor Green; Write-Host "Reinjecte les vrais noms dans un rapport (#12)"
+    Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement de l'entretien courant (entretien.json)"
     Write-Host "  ia setenv                        " -NoNewline -ForegroundColor Green; Write-Host "Active le venv (python/pip a la main)"
     Write-Host "  ia aide                          " -NoNewline -ForegroundColor Green; Write-Host "Cette aide"
     Write-Host ""
@@ -63,6 +65,41 @@ function Invoke-Setenv {
     Write-Info  " modifier l'environnement de la session parente.)"
 }
 
+function Show-Etat {
+    $p = Get-ProjetPath
+    if (-not (Test-Path -LiteralPath $p)) {
+        Write-Avert "Aucun entretien.json ici. Lance une commande (ex. ia transcrire) pour l'initialiser,"
+        Write-Info  "ou place-toi dans le repertoire racine d'un entretien."
+        return
+    }
+    $projet = Read-Projet
+    Write-Host ""
+    Write-Host "Entretien : $($projet.entretien)" -ForegroundColor Cyan
+    Write-Host "Audio     : $($projet.audio)" -ForegroundColor Gray
+    Write-Host "Mis a jour: $($projet.maj_le)" -ForegroundColor Gray
+    Write-Host ""
+    $libelles = [ordered]@{ transcription = "Transcription"; coupe = "Coupe"; anonymisation = "Anonymisation" }
+    foreach ($k in $libelles.Keys) {
+        $e = $projet.etapes.$k
+        $couleur = switch ($e.statut) {
+            "fait"     { "Green" }
+            "en_cours" { "Yellow" }
+            "echec"    { "Red" }
+            default    { "DarkGray" }
+        }
+        $duree = if ($e.duree_sec) { " ($([int]$e.duree_sec)s)" } else { "" }
+        Write-Host ("  {0,-14} " -f $libelles[$k]) -NoNewline
+        Write-Host ("{0}{1}" -f $e.statut, $duree) -ForegroundColor $couleur
+        if ($e.statut -eq "echec" -and $e.message) {
+            Write-Host ("                 -> {0}" -f $e.message) -ForegroundColor Red
+        }
+        if ($e.log) {
+            Write-Host ("                 log: {0}" -f $e.log) -ForegroundColor DarkGray
+        }
+    }
+    Write-Host ""
+}
+
 # Wrappers simples : commande -> script.
 $map = @{
     "transcrire" = "transcrire.ps1"
@@ -81,6 +118,7 @@ $mapAnon = @{
 switch ($Commande) {
     { $_ -in @($null, "", "aide", "help", "-h", "--help") } { Show-Aide; break }
     "setenv" { Invoke-Setenv; break }
+    "etat"   { Show-Etat; break }
     default {
         if ($mapAnon.ContainsKey($Commande)) {
             # anonymiser.ps1 <etape> [args...]

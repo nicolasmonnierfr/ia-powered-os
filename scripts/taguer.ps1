@@ -39,4 +39,16 @@ Write-Info "Le serveur s'arrete a la fermeture de l'onglet (ou Ctrl+C ici)."
 $pyArgs = @($serveur, "--root", $root, "--tagger", $tagger, "--port", $Port)
 if ($NoBrowser) { $pyArgs += "--no-browser" }
 
-& $python @pyArgs
+# Log du serveur tagueur (sans toucher au statut 'coupe' : c'est couper.ps1 qui
+# finalise la coupe ; ici on trace juste la session de tagging).
+$ctx = Start-Etape -Etape "coupe" -Details @{ sous_etape = "tagging" }
+$projet = Read-Projet
+# On remet 'coupe' en a_faire tant que l'audio coupe n'est pas produit ; le log
+# reste, mais le statut ne ment pas sur l'avancement.
+$projet.etapes.coupe.statut = "en_cours"
+Write-Projet $projet
+Write-Info "Log detaille : $($ctx.LogFile)"
+
+$null = Invoke-Logge -Contexte $ctx -Exe $python -Arguments $pyArgs
+
+Add-Content -LiteralPath $ctx.LogFile -Value "`r`n--- Session de tagging terminee (serveur arrete) ---" -Encoding UTF8

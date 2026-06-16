@@ -175,3 +175,130 @@ function Find-TranscriptSource {
     }
     return $null
 }
+
+# =============================================================================
+# LOGGING CENTRALISE + FICHIER PROJET (entretien.json)
+# =============================================================================
+# Deux niveaux (voir scripts/SCHEMA-entretien.md) :
+#   - log verbeux  : <repo>\logs\<date>-<heure>-<entretien>-<etape>.log
+#   - resume       : <entretien>\entretien.json (statut + horodatage par etape)
+
+function Get-LogsDir {
+    $d = Join-Path (Get-RepoHome) "logs"
+    if (-not (Test-Path -LiteralPath $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
+    return $d
+}
+
+function Now-Iso { return (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz") }
+
+# --- Fichier projet ----------------------------------------------------------
+
+function Get-ProjetPath { return (Join-Path (Get-EntretienRoot) "entretien.json") }
+
+function Read-Projet {
+    # Retourne l'objet projet (cree un squelette si absent/illisible).
+    $p = Get-ProjetPath
+    if (Test-Path -LiteralPath $p) {
+        try { return (Get-Content -LiteralPath $p -Raw -Encoding UTF8 | ConvertFrom-Json) }
+        catch { Write-Avert "entretien.json illisible, recreation." }
+    }
+    $audio = $null
+    try { $audio = (Find-Audio).Name } catch { }
+    $mk = { [pscustomobject]@{ statut = "a_faire"; debut = $null; fin = $null; duree_sec = $null; log = $null; details = [pscustomobject]@{}; message = $null } }
+    return [pscustomobject]@{
+        version   = 1
+        entretien = (Split-Path -Leaf (Get-EntretienRoot))
+        audio     = $audio
+        cree_le   = (Now-Iso)
+        maj_le    = (Now-Iso)
+        etapes    = [pscustomobject]@{
+            transcription = (& $mk)
+            coupe         = (& $mk)
+            anonymisation = (& $mk)
+        }
+    }
+}
+
+function Write-Projet {
+    param([Parameter(Mandatory)] $Projet)
+    $Projet.maj_le = (Now-Iso)
+    $json = $Projet | ConvertTo-Json -Depth 8
+    Set-Content -LiteralPath (Get-ProjetPath) -Value $json -Encoding UTF8
+}
+
+# Marque le DEBUT d'une etape : statut en_cours, ouvre le log centralise.
+# Retourne un objet contexte a passer a Complete-Etape.
+function Start-Etape {
+    param(
+        [Parameter(Mandatory)][ValidateSet("transcription","coupe","anonymisation")][string]$Etape,
+        [hashtable]$Details
+    )
+    $projet = Read-Projet
+    $horoFichier = (Get-Date).ToString("yyyyMMdd-HHmmss")
+    $entretien = (Split-Path -Leaf (Get-EntretienRoot))
+    $logFile = Join-Path (Get-LogsDir) "$horoFichier-$entretien-$Etape.log"
+    $logRel = "logs\" + (Split-Path -Leaf $logFile)
+
+    $e = $projet.etapes.$Etape
+    $e.statut = "en_cours"
+    $e.debut  = (Now-Iso)
+    $e.fin    = $null
+    $e.duree_sec = $null
+    $e.log    = $logRel
+    $e.message = $null
+    if ($Details) { $e.details = [pscustomobject]$Details }
+    Write-Projet $projet
+
+    # En-tete du log verbeux.
+    $head = @(
+        "==============================================================",
+        " IA-Powered-OS — log d'execution",
+        " Etape      : $Etape",
+        " Entretien  : $entretien ($(Get-EntretienRoot))",
+        " Debut      : $(Now-Iso)",
+        "=============================================================="
+    ) -join "`r`n"
+    Set-Content -LiteralPath $logFile -Value $head -Encoding UTF8
+
+    return [pscustomobject]@{
+        Etape     = $Etape
+        LogFile   = $logFile
+        Debut     = (Get-Date)
+    }
+}
+
+# Marque la FIN d'une etape : statut fait/echec, duree, message eventuel.
+function Complete-Etape {
+    param(
+        [Parameter(Mandatory)] $Contexte,
+        [Parameter(Mandatory)][ValidateSet("fait","echec")][string]$Statut,
+        [string]$Message
+    )
+    $projet = Read-Projet
+    $e = $projet.etapes.($Contexte.Etape)
+    $e.statut    = $Statut
+    $e.fin       = (Now-Iso)
+    $e.duree_sec = [int]((Get-Date) - $Contexte.Debut).TotalSeconds
+    if ($Message) { $e.message = $Message }
+    Write-Projet $projet
+
+    $foot = "`r`n--- Fin ($Statut) a $(Now-Iso), duree $($e.duree_sec)s ---"
+    Add-Content -LiteralPath $Contexte.LogFile -Value $foot -Encoding UTF8
+}
+
+# Execute un programme externe en capturant sa sortie A LA FOIS a l'ecran ET
+# dans le log verbeux (temps reel). Retourne UNIQUEMENT le code de sortie.
+function Invoke-Logge {
+    param(
+        [Parameter(Mandatory)] $Contexte,
+        [Parameter(Mandatory)][string]$Exe,
+        [Parameter(Mandatory)][object[]]$Arguments
+    )
+    Add-Content -LiteralPath $Contexte.LogFile -Value "`r`n> $Exe $($Arguments -join ' ')`r`n" -Encoding UTF8
+    # 2>&1 fusionne stderr ; Tee-Object affiche ET ecrit dans le log.
+    # IMPORTANT : on encadre le pipeline pour que la sortie parte a l'ecran/log
+    # mais NE soit PAS la valeur de retour de la fonction (sinon le code serait
+    # pollue par tout le flux). On lit $LASTEXITCODE juste apres.
+    & $Exe @Arguments 2>&1 | Tee-Object -FilePath $Contexte.LogFile -Append | Out-Host
+    return $LASTEXITCODE
+}

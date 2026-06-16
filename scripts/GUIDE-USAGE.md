@@ -41,6 +41,7 @@ tu ne le quittes plus. Les commandes créent et remplissent les sous-dossiers :
 │
 └── entretien_dupont/                <-- TU LANCES LES COMMANDES ICI
     ├── entretien_dupont.m4a          audio source
+    ├── entretien.json                suivi d'avancement + logs (cf. ia etat)
     ├── 1_transcription/              ia transcrire
     │   ├── entretien_dupont.txt
     │   └── entretien_dupont.srt
@@ -148,6 +149,41 @@ déplacer plus haut ensuite pour élargir le périmètre.
 
 ---
 
+## Suivi, logs et reprise
+
+Chaque commande écrit **deux traces** :
+
+- **Résumé d'avancement** : `entretien.json` à la racine de l'entretien
+  (statut de chaque étape, horodatage, durée, chemin du log). Consultable avec :
+
+  ```powershell
+  ia etat
+  ```
+
+- **Log détaillé** centralisé dans `<repo>\logs\` :
+  `<date>-<heure>-<entretien>-<étape>.log`. Il capture toute la sortie
+  (y compris les erreurs) — utile pour déboguer un run nocturne même après
+  fermeture du terminal.
+
+> ⚠️ Avant cette version, un run lancé la nuit puis fermé ne laissait aucune
+> trace. Désormais tout est consigné : en cas de blocage, ouvre le `.log`
+> correspondant (son chemin est rappelé à l'écran et listé par `ia etat`).
+
+### Enchaîner plusieurs entretiens (la nuit)
+
+Les transcriptions étant longues en CPU, lance-les **en série** (pas en
+parallèle : elles se disputeraient le processeur) :
+
+```powershell
+cd C:\...\entretien_A ; ia transcrire ; cd C:\...\entretien_B ; ia transcrire
+```
+
+Le `;` enchaîne la suivante même si la précédente échoue (souhaitable la nuit :
+un échec ne bloque pas le reste). Au matin, `ia etat` dans chaque dossier — ou
+les logs dans `<repo>\logs\` — te disent ce qui a réussi.
+
+---
+
 ## Activer le venv à la main (cas avancé)
 
 Les commandes `ia` n'ont pas besoin du venv activé : elles utilisent
@@ -172,5 +208,6 @@ Active le venv dans la session courante.
 | `ia analyser` | détection + validation | `memoire_client.json` (périmètre) |
 | `ia anonymiser` | application du remplacement | `3_anonymisation\` |
 | `ia repersonnaliser` | réinjection des vrais noms (#12) | `..._REPERSONNALISE` |
+| `ia etat` | avancement de l'entretien | lit `entretien.json` |
 | `ia setenv` | active le venv | session courante |
 | `ia aide` | liste les commandes | — |

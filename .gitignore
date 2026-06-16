@@ -40,3 +40,4 @@ temp/
 
 # Archives du repo (artefacts, jamais versionnés)
 *.zip
+logs/

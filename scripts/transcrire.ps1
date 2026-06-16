@@ -50,18 +50,28 @@ if ($ChunkMin)       { $pyArgs += @("--chunk-min", $ChunkMin) }
 if ($Model)          { $pyArgs += @("--model", $Model) }
 if ($Language)       { $pyArgs += @("--language", $Language) }
 
-# --- Execution ---------------------------------------------------------------
+# --- Execution (avec log centralise + suivi dans entretien.json) -------------
+$modeleLabel = if ($Model) { $Model } else { "defaut" }
+$ctx = Start-Etape -Etape "transcription" -Details @{ diarisation = (-not $NoDiarize); modele = $modeleLabel }
 Write-Info "Lancement (peut etre LONG en CPU)..."
-& $python @pyArgs
-if ($LASTEXITCODE -ne 0) { Write-Echec "La transcription a echoue (code $LASTEXITCODE)."; exit $LASTEXITCODE }
+Write-Info "Log detaille : $($ctx.LogFile)"
+$code = Invoke-Logge -Contexte $ctx -Exe $python -Arguments $pyArgs
+
+if ($code -ne 0) {
+    Complete-Etape -Contexte $ctx -Statut "echec" -Message "transcribe_robuste.py a renvoye le code $code"
+    Write-Echec "La transcription a echoue (code $code). Voir le log : $($ctx.LogFile)"
+    exit $code
+}
 
 # --- Verification ------------------------------------------------------------
 $txt = Join-Path $dest "$stem.txt"
 $srt = Join-Path $dest "$stem.srt"
 if ((Test-Path -LiteralPath $txt) -and (Test-Path -LiteralPath $srt)) {
+    Complete-Etape -Contexte $ctx -Statut "fait"
     Write-Ok "Transcription rangee dans 1_transcription\"
     Write-Info "  $stem.txt"
     Write-Info "  $stem.srt"
 } else {
-    Write-Avert "Sorties attendues non trouvees dans 1_transcription\. Verifie les messages ci-dessus."
+    Complete-Etape -Contexte $ctx -Statut "echec" -Message "Sorties .txt/.srt non trouvees dans 1_transcription\"
+    Write-Avert "Sorties attendues non trouvees dans 1_transcription\. Voir le log : $($ctx.LogFile)"
 }
