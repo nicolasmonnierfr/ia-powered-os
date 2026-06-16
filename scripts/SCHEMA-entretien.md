@@ -59,8 +59,12 @@ Créé / mis à jour automatiquement par les wrappers (`ia transcrire`, `ia tagu
 | `details` | objet | Infos spécifiques à l'étape (modèle, options…). |
 | `message` | string\|null | Message d'erreur si `statut = echec`, sinon `null`. |
 
-> **Anonymisation** : comporte deux sous-actions (`detecter`, `appliquer`).
-> Le statut reflète la dernière action ; `details.sous_etape` indique laquelle.
+> **Anonymisation** : comporte trois sous-actions (`detecter`, `appliquer`,
+> `repersonnaliser`). Le **cycle** d'anonymisation est porté par `detecter` (qui
+> laisse le statut en `en_cours`) puis `appliquer` (qui porte le statut final
+> `fait`/`echec`). `repersonnaliser` est le post-traitement **inverse** (#12) :
+> il est tracé mais ne redéfinit pas l'avancement du cycle. `details.sous_etape`
+> indique la dernière action exécutée.
 
 ## Statuts — cycle de vie
 

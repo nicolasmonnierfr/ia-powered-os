@@ -1,5 +1,5 @@
 # =============================================================================
-# anonymiser.ps1 — Pipeline d'anonymisation en TROIS temps (etape sensible).
+# anonymisation.ps1 — Pipeline d'anonymisation en TROIS temps (etape sensible).
 #
 # A lancer DEPUIS le repertoire racine de l'entretien.
 #
@@ -149,7 +149,7 @@ if ($Commande -eq "appliquer") {
 
     if (-not (Test-Path -LiteralPath $perim.MemoirePath)) {
         Write-Echec "memoire_client.json introuvable : $($perim.MemoirePath)"
-        Write-Info  "Lance d'abord .\anonymiser.ps1 detecter et exporte la memoire."
+        Write-Info  "Lance d'abord .\anonymisation.ps1 detecter et exporte la memoire."
         exit 1
     }
 

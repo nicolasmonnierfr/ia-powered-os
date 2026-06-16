@@ -11,7 +11,7 @@ A l'export, ecrit le memoire_client.json AU NIVEAU DU PERIMETRE (chemin transmis
 
 Serveur sur 127.0.0.1 uniquement. Arret par HEARTBEAT (comme le tagueur).
 
-Usage (lance par anonymiser.ps1) :
+Usage (lance par anonymisation.ps1) :
     python serveur_editeur.py --etat "<...3_anonymisation/x.etat.json>" \
         --memoire "<...perimetre/memoire_client.json>" \
         --editeur "<chemin editeur_alias.html>" [--port 8770]

@@ -366,7 +366,7 @@ Résolu d'un bloc :
 
 Outils touchés : `memoire.py` (nouveau), `migrer.py` (nouveau, conversion
 ancien→nouveau), `desanonymiser.py` (nouveau), `detecter.py`, `appliquer.py`,
-`reconcilier.py`, `editeur_alias.html`, `serveur_editeur.py`, `anonymiser.ps1`,
+`reconcilier.py`, `editeur_alias.html`, `serveur_editeur.py`, `anonymisation.ps1`,
 `_commun.ps1`, `SCHEMA.md`. Rétrocompatibilité : `--alias`/`--table` encore
 acceptés (migration à la volée) ; `migrer.py` convertit définitivement.
 

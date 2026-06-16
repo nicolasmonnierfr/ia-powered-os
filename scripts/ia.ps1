@@ -107,7 +107,7 @@ $map = @{
     "couper"     = "couper.ps1"
 }
 
-# Commandes d'anonymisation : toutes servies par anonymiser.ps1, avec une ETAPE
+# Commandes d'anonymisation : toutes servies par anonymisation.ps1, avec une ETAPE
 # interne injectee en premier argument positionnel. (option A : un seul wrapper)
 $mapAnon = @{
     "analyser"        = "detecter"
@@ -121,8 +121,8 @@ switch ($Commande) {
     "etat"   { Show-Etat; break }
     default {
         if ($mapAnon.ContainsKey($Commande)) {
-            # anonymiser.ps1 <etape> [args...]
-            $cible = Join-Path $PSScriptRoot "anonymiser.ps1"
+            # anonymisation.ps1 <etape> [args...]
+            $cible = Join-Path $PSScriptRoot "anonymisation.ps1"
             $etape = $mapAnon[$Commande]
             & $cible $etape @Reste
             exit $LASTEXITCODE
