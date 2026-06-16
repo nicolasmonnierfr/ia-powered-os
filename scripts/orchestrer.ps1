@@ -33,6 +33,13 @@ param(
 
 . "$PSScriptRoot\_commun.ps1"
 
+# IMPORTANT : la tache planifiee tourne en `pwsh -NoProfile`, dont l'encodage
+# console par defaut est l'OEM (CP850) et NON UTF-8. La sortie JSON d'etat.py est
+# en UTF-8 : sans cette ligne, les caracteres accentues des chemins sont corrompus
+# (ex. "Presentation" -> "Pr├®sentation") et `Push-Location` echoue sur ces
+# dossiers -> la transcription ne demarre jamais. On force donc UTF-8.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 $repo    = Get-RepoHome
 $python  = Get-PythonExe -RepoHome $repo
 $etatPy  = Get-Tool -RepoHome $repo "tools\orchestrateur\etat.py"
@@ -40,6 +47,54 @@ $syncPy  = Get-Tool -RepoHome $repo "tools\orchestrateur\sync.py"
 $wTrans  = Join-Path $PSScriptRoot "transcrire.ps1"
 $wCouper = Join-Path $PSScriptRoot "couper.ps1"
 $wAnon   = Join-Path $PSScriptRoot "anonymisation.ps1"
+
+# --- Auto-skip d'une transcription qui CASSE (ne se relance pas a l'infini) ---
+# Une transcription qui meurt AVANT d'avoir produit le moindre troncon (process
+# tue, sortie precoce...) bloquerait l'orchestrateur sur le meme fichier a chaque
+# tick. On compte les tentatives DANS entretien.json (champ durable
+# `tentatives_auto`, ignore par etat.py/sync.py) avec le nombre de troncons deja
+# faits au moment du lancement (`progres_auto`). Au tick suivant, si le dernier
+# lancement est mort :
+#   - il a PROGRESSE (plus de troncons) -> vraie interruption, on laisse reprendre ;
+#   - il n'a RIEN produit $MaxTentatives fois -> on marque `echec` (quarantaine) :
+#     le fichier sort des candidats et l'orchestrateur passe au suivant.
+$MaxTentatives = 2
+
+function Read-ProjetAt {
+    param([string]$Chemin)
+    $p = Join-Path $Chemin "entretien.json"
+    if (Test-Path -LiteralPath $p) {
+        try { return (Get-Content -LiteralPath $p -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { }
+    }
+    return $null
+}
+function Write-ProjetAt {
+    param([string]$Chemin, $Projet)
+    $Projet.maj_le = (Now-Iso)
+    ($Projet | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath (Join-Path $Chemin "entretien.json") -Encoding UTF8
+}
+function Set-Champ {
+    param($Obj, [string]$Nom, $Valeur)
+    if ($Obj.PSObject.Properties.Name -contains $Nom) { $Obj.$Nom = $Valeur }
+    else { $Obj | Add-Member -NotePropertyName $Nom -NotePropertyValue $Valeur -Force }
+}
+function Get-Champ {
+    param($Obj, [string]$Nom, $Defaut)
+    if ($Obj.PSObject.Properties.Name -contains $Nom) { return $Obj.$Nom }
+    return $Defaut
+}
+function Get-NbTroncons {
+    # Nombre de troncons DEJA transcrits (chunk_*.json) pour un stem ; 0 si aucun.
+    param([string]$Stem)
+    if (-not $Stem) { return 0 }
+    $root = Join-Path $repo "data\.chunks"
+    if (-not (Test-Path -LiteralPath $root)) { return 0 }
+    $rx = "^\d{8}-" + [regex]::Escape($Stem) + "$"
+    $dirs = @(Get-ChildItem -LiteralPath $root -Directory -EA SilentlyContinue | Where-Object { $_.Name -match $rx })
+    if (-not $dirs.Count) { return 0 }
+    $d = ($dirs | Sort-Object LastWriteTime -Descending)[0]
+    return @(Get-ChildItem -LiteralPath $d.FullName -Filter 'chunk_*.json' -EA SilentlyContinue).Count
+}
 
 if (-not (Test-Path -LiteralPath $Perimetre)) { Write-Echec "Perimetre introuvable : $Perimetre"; exit 1 }
 $perim = (Resolve-Path -LiteralPath $Perimetre).Path
@@ -103,6 +158,7 @@ if ($DryRun) {
 $lock = Join-Path (Get-LogsDir) ".transcription.lock"
 $verrouActif = $false
 $verrouDossier = $null
+$exclure = @()                 # chemins mis en quarantaine pendant CE tick
 if (Test-Path -LiteralPath $lock) {
     $info = $null
     try { $info = Get-Content -LiteralPath $lock -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
@@ -110,6 +166,32 @@ if (Test-Path -LiteralPath $lock) {
         $verrouActif = $true
         $verrouDossier = $info.dossier
     } else {
+        # Verrou perime : le DERNIER lancement est MORT. On "sonde" ce fichier.
+        if ($info -and $info.chemin) {
+            $mort = $etat.entretiens | Where-Object { $_.chemin -eq $info.chemin } | Select-Object -First 1
+            if ($mort -and $mort.transcription -ne "fait") {
+                $proj = Read-ProjetAt $info.chemin
+                if ($proj) {
+                    $tr = $proj.etapes.transcription
+                    $tent = [int](Get-Champ $tr 'tentatives_auto' 0)
+                    $progresAvant = [int](Get-Champ $tr 'progres_auto' 0)
+                    $progresMaint = Get-NbTroncons -Stem $mort.stem
+                    if ($progresMaint -gt $progresAvant) {
+                        Set-Champ $tr 'tentatives_auto' 0      # a avance -> vraie interruption
+                        Write-ProjetAt $info.chemin $proj
+                        Write-Info "Transcription interrompue mais AVANCEE ($progresMaint troncons) : $($mort.dossier) — reprise au besoin."
+                    } elseif ($tent -ge $MaxTentatives) {
+                        $tr.statut  = "echec"
+                        $tr.message = "Cassee $tent fois sans produire de troncon (process tue avant demarrage). Mise de cote auto ; relancer a la main : ia transcrire."
+                        Write-ProjetAt $info.chemin $proj
+                        $exclure += $info.chemin
+                        Write-Avert "Transcription mise de cote (cassee $tent x sans progres) : $($mort.dossier). Passage au fichier suivant."
+                    } else {
+                        Write-Info "Derniere transcription morte sans progres ($($mort.dossier), tentative $tent/$MaxTentatives) — nouvel essai possible."
+                    }
+                }
+            }
+        }
         Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue   # verrou perime
     }
 }
@@ -122,7 +204,8 @@ foreach ($e in $enEchec) {
 # Candidats : a transcrire et statut 'a_faire' OU 'en_cours' perime (= reprise).
 # (Sans verrou actif, un 'en_cours' ne peut etre qu'un run mort : on le reprend.)
 $candidats = @($etat.entretiens | Where-Object {
-    $_.action -eq "transcrire" -and $_.transcription -in @("a_faire", "en_cours") })
+    $_.action -eq "transcrire" -and $_.transcription -in @("a_faire", "en_cours") -and
+    ($exclure -notcontains $_.chemin) })
 
 if ($NoTranscribe) {
     if ($candidats.Count) { Write-Info "Transcription(s) en attente (non lancees, -NoTranscribe) : $($candidats.dossier -join ', ')" }
@@ -135,6 +218,17 @@ if ($NoTranscribe) {
 } else {
     $cible = $candidats[0]
     $reprise = if ($cible.transcription -eq "en_cours") { " (REPRISE d'un run interrompu)" } else { "" }
+    # Enregistrer la tentative AVANT le lancement : durable meme si le process
+    # meurt avant Start-Etape. tentatives_auto++ et progres_auto = troncons deja
+    # faits (pour mesurer un eventuel progres au tick suivant).
+    $projC = Read-ProjetAt $cible.chemin
+    if ($projC) {
+        $trC = $projC.etapes.transcription
+        Set-Champ $trC 'tentatives_auto' ([int](Get-Champ $trC 'tentatives_auto' 0) + 1)
+        Set-Champ $trC 'progres_auto'    (Get-NbTroncons -Stem $cible.stem)
+        if ($trC.statut -ne "en_cours") { Set-Champ $trC 'statut' "en_cours"; Set-Champ $trC 'debut' (Now-Iso) }
+        Write-ProjetAt $cible.chemin $projC
+    }
     if ($TranscribeInline) {
         # MODE TACHE PLANIFIEE : transcription SYNCHRONE dans CE process. Un
         # process detache (Start-Process) serait tue par le planificateur a la
