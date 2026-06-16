@@ -1,0 +1,41 @@
+# Normalisation des fins de ligne — fige le comportement quelle que soit la
+# plateforme et coupe les avertissements "LF will be replaced by CRLF".
+#
+# Regle par defaut : Git stocke en LF dans le depot, restitue selon la regle
+# ci-dessous au checkout.
+* text=auto
+
+# --- Scripts Windows : CRLF (PowerShell attend des CRLF) ----------------------
+*.ps1   text eol=crlf
+*.psm1  text eol=crlf
+*.psd1  text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# --- Code / config multiplateforme : LF --------------------------------------
+*.py    text eol=lf
+*.sh    text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+
+# --- Documents / web : LF (rendu identique partout) --------------------------
+*.md    text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.js    text eol=lf
+*.txt   text eol=lf
+*.srt   text eol=lf
+
+# --- Binaires : jamais de conversion -----------------------------------------
+*.zip   binary
+*.docx  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.m4a   binary
+*.mp3   binary
+*.wav   binary
+*.mp4   binary
