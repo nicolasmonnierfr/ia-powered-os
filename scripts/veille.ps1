@@ -9,7 +9,7 @@
 #      Ctrl+C pour arreter. Chaque tick = un appel a orchestrer.ps1.
 #
 #   2) TACHE PLANIFIEE WINDOWS (filet de securite, survit au redemarrage) :
-#        .\veille.ps1 "D:\...\Interviews" -Installer            # toutes les 10 min
+#        .\veille.ps1 "D:\...\Interviews" -Installer            # toutes les 5 min
 #        .\veille.ps1 "D:\...\Interviews" -Installer -IntervalleMin 15
 #        .\veille.ps1 -Desinstaller
 #        .\veille.ps1 -Statut                                   # etat de la tache
@@ -28,7 +28,7 @@ param(
     [Parameter(ParameterSetName = "Boucle")] [switch]$NoTranscribe,
     # Tache planifiee
     [Parameter(ParameterSetName = "Install")]   [switch]$Installer,
-    [Parameter(ParameterSetName = "Install")]   [int]$IntervalleMin = 10,
+    [Parameter(ParameterSetName = "Install")]   [int]$IntervalleMin = 5,
     [Parameter(ParameterSetName = "Desinstall")][switch]$Desinstaller,
     [Parameter(ParameterSetName = "Statut")]    [switch]$Statut
 )
