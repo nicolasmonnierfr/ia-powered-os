@@ -22,7 +22,8 @@ IA-Powered-OS/
 ├── bootstrap/        Scripts d'installation (prérequis système, venv)
 ├── tools/            Outils métier exécutables
 │   ├── transcription/  Transcription d'entretiens (WhisperX) + tagueur + serveur
-│   └── anonymisation/  Anonymisation locale des transcripts (Presidio) + éditeur + serveur
+│   ├── anonymisation/  Anonymisation locale des transcripts (Presidio) + éditeur + serveur
+│   └── orchestrateur/  Vue d'état globale + sync de la mémoire par projet
 ├── scripts/          Commande `ia` + wrappers (industrialisation du pipeline)
 ├── config/           Modèles de configuration (.env.example)
 ├── data/             Données locales (gitignoré : intermédiaires .chunks/)
@@ -47,6 +48,7 @@ IA-Powered-OS/
 |-------|-------------|------|
 | `tools/transcription` | Transcription + diarisation d'entretiens (WhisperX, local) + tagueur | En cours |
 | `tools/anonymisation` | Anonymisation locale des transcripts (Presidio/spaCy FR) avec pseudonymes cohérents et mémoire client unique réutilisable (+ dé-anonymisation) | En cours |
+| `tools/orchestrateur` | Vue d'avancement par entretien (tableau global) + exécution auto de l'automatisable + sync de la mémoire par projet | En cours |
 
 ## Commande `ia` (industrialisation)
 
@@ -55,8 +57,19 @@ dossier d'un entretien** : `ia transcrire`, `ia taguer`, `ia couper`,
 `ia analyser` / `ia anonymiser` / `ia repersonnaliser`. Installation : `.\scripts\installer-ia.ps1`.
 Voir `scripts/GUIDE-USAGE.md`.
 
-> L'orchestration par Claude Code (pilotage automatique du pipeline) sera
-> ajoutée ultérieurement, sous `.claude/skills/`.
+### Orchestration multi-entretiens
+
+Au niveau d'un **périmètre** (dossier contenant plusieurs entretiens) :
+
+- `ia tableau` — vue globale de l'avancement de tous les entretiens ;
+- `ia orchestrer` — une passe : affiche le tableau, écrit `ETAT.md`, et **exécute
+  automatiquement** ce qui peut l'être (couper, anonymiser ; transcrire en
+  arrière-plan, sérialisé). Synchronise au passage les `entretien.json` ;
+- `ia veille` — surveillance **continue** : boucle terminal **ou** tâche
+  planifiée Windows (`-Installer` / `-Desinstaller` / `-Statut`).
+
+Seules les étapes humaines (`taguer`, `analyser`) ne sont pas automatisées ;
+elles sont signalées dans le tableau.
 
 ## Plateforme
 

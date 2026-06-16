@@ -12,6 +12,9 @@
 #   ia anonymiser        # applique le remplacement -> transcript anonymise
 #   ia repersonnaliser [-Rapport f] [-Court]   # reinjecte les vrais noms (#12)
 #   ia etat              # affiche l'avancement de l'entretien courant
+#   ia tableau [perim]   # vue globale de tous les entretiens d'un perimetre
+#   ia orchestrer [perim]# une passe : tableau + execution de l'automatisable
+#   ia veille [perim]    # surveillance continue (boucle / tache planifiee)
 #   ia setenv            # active le venv dans la session courante (python/pip)
 #   ia aide              # affiche cette aide
 #
@@ -42,6 +45,9 @@ function Show-Aide {
     Write-Host "  ia anonymiser                    " -NoNewline -ForegroundColor Green; Write-Host "Applique le remplacement -> 3_anonymisation\"
     Write-Host "  ia repersonnaliser [-Rapport f]  " -NoNewline -ForegroundColor Green; Write-Host "Reinjecte les vrais noms dans un rapport (#12)"
     Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement de l'entretien courant (entretien.json)"
+    Write-Host "  ia tableau [perimetre]           " -NoNewline -ForegroundColor Green; Write-Host "Vue globale de tous les entretiens"
+    Write-Host "  ia orchestrer [perimetre]        " -NoNewline -ForegroundColor Green; Write-Host "Une passe : tableau + execute l'automatisable"
+    Write-Host "  ia veille [perimetre]            " -NoNewline -ForegroundColor Green; Write-Host "Surveillance continue (boucle / tache planifiee)"
     Write-Host "  ia setenv                        " -NoNewline -ForegroundColor Green; Write-Host "Active le venv (python/pip a la main)"
     Write-Host "  ia aide                          " -NoNewline -ForegroundColor Green; Write-Host "Cette aide"
     Write-Host ""
@@ -105,6 +111,8 @@ $map = @{
     "transcrire" = "transcrire.ps1"
     "taguer"     = "taguer.ps1"
     "couper"     = "couper.ps1"
+    "orchestrer" = "orchestrer.ps1"
+    "veille"     = "veille.ps1"
 }
 
 # Commandes d'anonymisation : toutes servies par anonymisation.ps1, avec une ETAPE
@@ -115,10 +123,21 @@ $mapAnon = @{
     "repersonnaliser" = "repersonnaliser"
 }
 
+function Show-Tableau {
+    param([object[]]$ArgsReste)
+    $repo   = Get-RepoHome
+    $python = Get-PythonExe -RepoHome $repo
+    $etatPy = Join-Path $repo "tools\orchestrateur\etat.py"
+    if (-not (Test-Path -LiteralPath $etatPy)) { Write-Echec "etat.py introuvable : $etatPy"; return }
+    $perim = if ($ArgsReste -and $ArgsReste.Count -ge 1) { [string]$ArgsReste[0] } else { (Get-Location).Path }
+    & $python $etatPy $perim --format table
+}
+
 switch ($Commande) {
     { $_ -in @($null, "", "aide", "help", "-h", "--help") } { Show-Aide; break }
-    "setenv" { Invoke-Setenv; break }
-    "etat"   { Show-Etat; break }
+    "setenv"  { Invoke-Setenv; break }
+    "etat"    { Show-Etat; break }
+    "tableau" { Show-Tableau -ArgsReste $Reste; break }
     default {
         if ($mapAnon.ContainsKey($Commande)) {
             # anonymisation.ps1 <etape> [args...]

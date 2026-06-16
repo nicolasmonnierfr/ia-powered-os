@@ -22,6 +22,8 @@ Routes :
     GET  /api/etat         -> contenu du .etat.json
     GET  /api/memoire      -> contenu du memoire_client.json existant (ou 404)
     POST /api/export       -> ecrit le memoire_client.json au chemin du perimetre
+                              ET estampille le .etat.json (validation.faite=true),
+                              trace exploitee par l'orchestrateur pour l'anonym. auto.
     POST /api/ping         -> heartbeat
 """
 
@@ -31,6 +33,7 @@ import sys
 import threading
 import time
 import webbrowser
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -54,6 +57,33 @@ class Etat:
     def idle(self):
         with self.lock:
             return time.time() - self.last_ping
+
+
+def _stamper_validation(etat_path: Path, memoire_path: Path) -> bool:
+    """Marque le .etat.json comme VALIDE (analyse terminee par l'humain).
+
+    Ecrit un bloc `validation` : { faite: true, le: <ISO>, memoire: <chemin> }.
+    Idempotent (re-export -> rafraichit l'horodatage). Best-effort : un echec
+    n'invalide pas l'export de la memoire (qui, lui, a deja reussi).
+    Retourne True si la trace a bien ete ecrite.
+    """
+    try:
+        data = json.loads(etat_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    data["validation"] = {
+        "faite": True,
+        "le": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "memoire": str(memoire_path),
+    }
+    try:
+        etat_path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
+        return True
+    except OSError:
+        return False
 
 
 def make_handler(etat: Etat):
@@ -119,7 +149,13 @@ def make_handler(etat: Etat):
                 etat.memoire_path.write_text(content, encoding="utf-8")
             except (OSError, TypeError) as e:
                 return self._json(500, {"error": f"ecriture memoire_client.json : {e}"})
-            self._json(200, {"ok": True, "memoire_path": str(etat.memoire_path)})
+            # Trace de validation : l'export reussi de la memoire EST l'evenement
+            # qui prouve que l'humain a valide l'analyse. On l'estampille dans le
+            # .etat.json pour que l'orchestrateur puisse declencher l'anonymisation
+            # automatique (etape "analyser" = la seule non automatisable).
+            valide = _stamper_validation(etat.etat_path, etat.memoire_path)
+            self._json(200, {"ok": True, "memoire_path": str(etat.memoire_path),
+                             "validation_tracee": valide})
 
     return Handler
 

@@ -208,6 +208,80 @@ Active le venv dans la session courante.
 | `ia analyser` | détection + validation | `memoire_client.json` (périmètre) |
 | `ia anonymiser` | application du remplacement | `3_anonymisation\` |
 | `ia repersonnaliser` | réinjection des vrais noms (#12) | `..._REPERSONNALISE` |
-| `ia etat` | avancement de l'entretien | lit `entretien.json` |
+| `ia etat` | avancement de l'entretien **courant** | lit `entretien.json` |
+| `ia tableau [périm]` | vue **globale** de tous les entretiens | tableau console |
+| `ia orchestrer [périm]` | une passe : tableau + exécute l'automatisable | `ETAT.md` + livrables |
+| `ia veille [périm]` | surveillance **continue** (boucle / tâche planifiée) | — |
 | `ia setenv` | active le venv | session courante |
 | `ia aide` | liste les commandes | — |
+
+---
+
+## Orchestration & vision permanente
+
+Au-delà du suivi par entretien (`ia etat`), trois commandes pilotent **tout un
+périmètre** (le dossier qui contient les sous-dossiers d'entretien). Le
+**périmètre** par défaut est le répertoire courant ; on peut le passer en
+argument.
+
+### `ia tableau` — la vue globale
+
+```powershell
+cd C:\...\Interviews
+ia tableau
+```
+
+Affiche, pour chaque entretien, l'état de chaque étape et la **prochaine
+action** en distinguant ce qui est **automatisable** (`auto`) de ce qui te
+revient (`toi`). Lecture seule, n'exécute rien.
+
+```
+  Entretien            Transcr  Tag  Coupe  Analyse  Anonym  Prochaine action (qui)
+  ...
+  Légende : OK=fait  --=à faire  ..=en cours  ~~=détecté (analyse non validée)  !!=échec
+```
+
+### `ia orchestrer` — une passe automatique
+
+```powershell
+ia orchestrer                 # depuis le périmètre
+ia orchestrer -DryRun         # montre ce qui serait lancé, sans rien exécuter
+ia orchestrer -NoTranscribe   # n'enclenche pas de transcription
+```
+
+Affiche le tableau, écrit `ETAT.md` au périmètre, puis **réalise
+l'automatisable** :
+- **couper** (rapide) dès qu'un `plan_de_coupe.json` est présent sans audio coupé ;
+- **anonymiser** (rapide) dès que l'analyse a été **validée** (voir ci-dessous)
+  et que la mémoire existe ;
+- **transcrire** (longue) : lancée en **arrière-plan**, **une seule à la fois**
+  (sérialisation par verrou + détection de l'`en_cours`). Un échec n'est **pas**
+  relancé automatiquement (il est signalé pour décision manuelle).
+
+À chaque passe, l'orchestrateur **synchronise aussi les `entretien.json`** avec
+la réalité du disque (étapes déjà faites « ailleurs » marquées `fait`), pour que
+la mémoire par projet ne mente jamais.
+
+> **Étape `analyser` = la seule non automatisable.** La validation humaine des
+> entités (éditeur d'alias) laisse désormais une **trace** dans le `.etat.json`
+> (`validation.faite`) au moment où tu cliques **« Exporter la mémoire »**. C'est
+> cette trace qui autorise l'anonymisation automatique. Tant qu'elle n'est pas
+> là, l'orchestrateur affiche « Analyser (toi) » et n'anonymise pas.
+
+### `ia veille` — surveillance continue (les deux modes)
+
+```powershell
+# 1) Boucle terminal (vision live ; Ctrl+C pour arrêter)
+ia veille                       # tick toutes les 60 s
+ia veille -Intervalle 30 -Clair # 30 s, écran rafraîchi
+
+# 2) Tâche planifiée Windows (filet de sécurité, survit au redémarrage)
+ia veille -Installer                  # tick toutes les 10 min
+ia veille -Installer -IntervalleMin 15
+ia veille -Statut
+ia veille -Desinstaller
+```
+
+Boucle et tâche planifiée partagent le **même tick** (`ia orchestrer`) et le
+**même verrou de transcription** : les activer toutes les deux est redondant
+mais **sans danger** (jamais deux transcriptions en parallèle).

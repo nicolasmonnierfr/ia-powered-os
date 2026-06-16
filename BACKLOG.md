@@ -340,6 +340,57 @@ re-run involontaire.
 
 ## Fait
 
+### 18. Orchestrateur multi-entretiens : vision permanente + exécution auto (16/06/2026)
+**Besoin** : disposer en permanence de l'état du pipeline **par entretien** (le
+tableau d'avancement) et **réaliser automatiquement ce qui peut l'être** —
+transcription auto, découpage auto une fois le `plan_de_coupe.json` généré,
+anonymisation auto une fois l'analyse **validée**. S'appuie sur la mémoire par
+projet (#15, `entretien.json`).
+
+**Livré** :
+- `tools/orchestrateur/etat.py` — moteur d'état **lecture seule** : scanne un
+  périmètre, calcule par entretien l'état de chaque étape + la **prochaine
+  action** (auto vs humain), en réconciliant le système de fichiers (autoritaire)
+  avec `entretien.json`. Rendus `table` / `json` / `md` (`ETAT.md`).
+- `tools/orchestrateur/sync.py` — aligne les `entretien.json` sur la réalité du
+  disque (**upgrade-only** : ne retrograde jamais, préserve horodatages/logs).
+  Corrige la mémoire par projet pour les étapes faites « ailleurs » (migration,
+  version antérieure).
+- `scripts/orchestrer.ps1` — **tick** idempotent : sync + tableau + `ETAT.md` +
+  exécution de l'automatisable. `couper`/`anonymiser` en synchrone (rapides) ;
+  `transcrire` en arrière-plan, **une seule à la fois** (verrou +
+  détection de l'`en_cours`, y compris un run lancé hors orchestrateur). Un
+  **échec n'est pas relancé** automatiquement (signalé). Options `-DryRun`,
+  `-NoTranscribe`, `-NoEtatMd`.
+- `scripts/veille.ps1` — surveillance **continue** : boucle terminal
+  (`-Intervalle`, `-Clair`) **et** tâche planifiée Windows
+  (`-Installer`/`-IntervalleMin`/`-Desinstaller`/`-Statut`). Tick partagé +
+  verrou commun → activer les deux est redondant mais sans danger.
+- `scripts/_tache.ps1` — lanceur de la tâche planifiée : journalise chaque tick
+  (`logs/orchestrer-tache.log`) et force le **mode transcription INLINE**.
+- `ia.ps1` — nouvelles commandes `ia tableau` / `ia orchestrer` / `ia veille`.
+
+**Gotcha planificateur (résolu)** : une transcription lancée en process *détaché*
+(`Start-Process`) par la tâche est **tuée par le planificateur à la fin du tick**.
+D'où `orchestrer -TranscribeInline` (transcription **synchrone** dans le process
+du tick) utilisé par la tâche ; `MultipleInstances=IgnoreNew` empêche le
+chevauchement. La **sérialisation est auto-réparante** : un `en_cours` sans
+verrou actif (PID vivant) est considéré périmé et **repris** aux tronçons déjà
+sauvegardés (validé : reprise de Nicolas au tronçon 2 après kill du batch).
+
+**Chaînon manquant résolu** : l'étape `analyser` (validation humaine des entités)
+est la seule non automatisable, et ne laissait **aucune trace**. `serveur_editeur.py`
+**estampille désormais le `.etat.json`** (`validation.faite=true` + horodatage) à
+l'export réussi de la mémoire. C'est cette trace qui **déclenche
+l'anonymisation automatique** — pas la simple présence de la détection.
+
+Outils touchés : `serveur_editeur.py` (trace de validation), `etat.py` (nouveau),
+`sync.py` (nouveau), `orchestrer.ps1` (nouveau), `veille.ps1` (nouveau), `ia.ps1`,
+`README.md`, `scripts/GUIDE-USAGE.md`.
+
+> Validé sous Windows le 16/06/2026 : tableau, couper auto (Vanessa 1),
+> sérialisation transcription, sync, cycle install/désinstall de la tâche planifiée.
+
 ### 14 + 8 + 13 + 7 + 12 + 17. Refonte du modèle de persistance (16/06/2026)
 Format de persistance unifié (**piste A2**) : un **artefact unique par client**
 `memoire_client.json` (remplace `alias.yaml` + `table_correspondance.json`) +
