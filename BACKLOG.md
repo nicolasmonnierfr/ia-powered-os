@@ -1,8 +1,12 @@
 # Backlog — IA-Powered-OS
 
-Évolutions identifiées, à traiter plus tard. Chaque item est décrit avec assez
-de contexte pour être repris sans rediscussion. Quand on en traite un, le
-déplacer en « Fait » avec la date.
+Évolutions identifiées, **à traiter**. Chaque item est décrit avec assez de
+contexte pour être repris sans rediscussion.
+
+> **Cycle de vie** : ce fichier ne contient QUE ce qui reste à faire. Quand un
+> item est réalisé, il est décrit dans [`CHANGELOG.md`](CHANGELOG.md) (sous la
+> version concernée, avec son numéro d'origine) **et retiré d'ici**. Les numéros
+> sont des identifiants stables — ne pas les renuméroter.
 
 ---
 
@@ -63,7 +67,10 @@ antérieur à la 1re parole conservée.
 
 ---
 
-## Réconciliation — à clarifier : tagueur OU anonymisation ?
+## Anonymisation — éditeur d'alias / détection
+
+> Chantier cohérent à traiter ensemble : **#6 + #9 + #10** reposent sur la même
+> évolution du format `.etat.json` (propagation des timecodes par occurrence).
 
 ### 2. Naviguer entre plusieurs extraits d'un même locuteur
 **Besoin** : lors de l'identification d'un locuteur, l'extrait proposé est
@@ -115,53 +122,6 @@ identifiées comme également pénalisantes :
 
 **Sévérité** : confort, non bloquant. Mais fort impact sur la vitesse de
 validation. Identifié le 14/06/2026.
-
-### 7. L'éditeur d'alias n'exporte pas `locuteurs_generiques`
-**Besoin** : l'éditeur HTML lit la section `locuteurs_generiques` d'un
-`alias.yaml` existant, mais son tableau interne `generiques` n'est jamais
-alimenté par l'interface, et l'export réécrit donc toujours une liste vide
-(`locuteurs_generiques: []`). Conséquence : les rôles génériques à conserver
-(« Interviewer », « Candidat ») doivent être ajoutés à la main dans le YAML.
-
-**Piste** : ajouter dans l'éditeur une zone pour déclarer/éditer les locuteurs
-génériques, et les inclure à l'export. Vérifier la cohérence avec `appliquer.py`
-(comment il traite cette liste).
-
-**Sévérité** : mineure. Identifié le 14/06/2026.
-
-### 8. BUG — l'export YAML corrompt silencieusement les pseudos non numérotés
-**Symptôme** : certains pseudos s'affichent correctement dans l'éditeur mais ne
-sont pas correctement exportés ; un avertissement signale des pseudos
-« incomplets » (`_?`/`_X`) qu'on ne voit pas à l'écran.
-
-**Cause identifiée** (code lu le 14/06/2026) :
-- Validation (ligne ~427) : `groups.filter(g => !/_\d+$/.test(g.pseudo))` —
-  un pseudo est jugé invalide s'il ne finit PAS par `_<chiffre>`.
-- Écriture (ligne ~413) : `g.pseudo && /_\d+$/.test(g.pseudo) ? g.pseudo :
-  ${g.type}_X` — si le pseudo ne finit pas par `_<chiffre>`, il est **réécrit
-  silencieusement en `TYPE_X`**. Plusieurs pseudos non conformes s'écrasent
-  alors sur le même `TYPE_X`.
-
-**Pattern des cas perdus** : tout pseudo ne se terminant pas par `_<nombre>` —
-ex. `SOCIETE`, `CONSULTANT`, `PRODUIT_A`, `PROJET_ALPHA`, `PERSONNE_1b`.
-
-**Gravité** : SÉRIEUSE — perte silencieuse de configuration d'anonymisation,
-sans indiquer quel pseudo est fautif. Contournement actuel : forcer un suffixe
-`_<chiffre>` (ex. `SOCIETE_1`) même pour les singletons.
-
-**Constat de conception associé** : la contrainte `_<chiffre>` est purement
-artificielle, propre à l'éditeur. `appliquer.py` accepte n'importe quel pseudo
-tel quel (la regex `([A-ZÉ]+)_(\d+)$` n'y sert qu'à incrémenter les compteurs,
-pas à valider). Donc `SOCIETE` / `CONSULTANT` sans numéro fonctionneraient
-parfaitement à l'application — c'est l'éditeur qui bloque à tort.
-
-**Correctif** :
-- Écriture : ne plus jamais réécrire en `TYPE_X` ; écrire le pseudo tel quel.
-- Validation : remplacer `/_\d+$/` par un test « pseudo non vide / format
-  raisonnable » et **lister nommément** les pseudos fautifs.
-- Autoriser les pseudos sans suffixe numérique (singletons : `SOCIETE`,
-  `CONSULTANT`). Noter que `type_from_pseudo` les typera `PRODUIT` par défaut
-  (sans incidence sur le remplacement).
 
 ### 9. Détecteur de similarité / alerte homonymes
 **Besoin** : signaler le risque d'homonymie — ex. « Marc Durand » et « Marc
@@ -215,256 +175,9 @@ l'extrait.
 **Avantage** : ne touche PAS `detecter.py` ni le format `.etat.json` — réalisable
 immédiatement, indépendamment des autres items. Identifié le 14/06/2026.
 
-### 12. Dé-anonymisation / repersonnalisation des rapports
-**Besoin** : les rapports d'analyse produits à partir du transcript anonymisé
-contiennent les pseudos (`PERSONNE_1`…). Pour les livrer au dirigeant, il faut
-faire le **chemin inverse** : réinjecter les vrais noms.
-
-**Faisabilité** : simple et plus directe que l'anonymisation. La
-`table_correspondance.json` contient déjà, par entrée : `pseudo`, `canonique`
-(variante la plus longue, ex. « Jean Dupont ») et `variantes`. Le retour est un
-mapping **`pseudo → canonique`** sans ambiguïté (chaque pseudo est unique → pas
-de collision, contrairement à l'aller).
-
-**Forme pressentie** : nouveau script symétrique d'`appliquer.py`, p. ex.
-`desanonymiser.py` :
-`python desanonymiser.py rapport_avec_alias.<ext> --table table_correspondance.json`
-→ `rapport_REPERSONNALISE.<ext>`.
-
-**À cadrer avant de coder** :
-- **Cible du remplacement** : toujours le `canonique` (le plus long), ou rendre
-  configurable (forme courte/formelle selon le rapport) ?
-- **Robustesse du match** : remplacer en **mot entier** (insensible à la casse)
-  pour éviter les faux positifs ; **trier par longueur décroissante** pour que
-  `PERSONNE_10` ne soit pas cassé par `PERSONNE_1` (réflexe déjà présent dans
-  `appliquer.py`).
-- **Format de sortie** : `.txt`/`.md` (trivial) vs `.docx`/`.pdf` (traverser la
-  mise en forme sans la casser — s'appuyer sur les skills docx/pdf). Déterminer
-  le format réel des rapports avant de coder.
-
-**Sévérité** : fonctionnalité manquante (complète le pipeline). Identifié le
-14/06/2026.
-
-> ⚠️ SÉCURITÉ : le fichier dé-anonymisé **contient à nouveau les vraies données**.
-> Il ne doit JAMAIS être renvoyé vers une IA externe. Le script doit le rappeler
-> et nommer la sortie de façon explicite (`_REPERSONNALISE`).
-
-### 13. BUG — le type des entités est perdu à l'export (tout devient PRODUIT)
-**Symptôme** : dans `table_correspondance.json`, des entités identifiées comme
-PERSONNE (badge correct dans l'éditeur) ressortent typées `PRODUIT`.
-
-**Cause identifiée** (code lu le 14/06/2026) :
-- L'éditeur **n'écrit jamais le type** dans le YAML. Sous `forcer:`, il n'écrit
-  que le pseudo comme clé (`PERSONNE_1:`) ; l'attribut interne `g.type` (le badge
-  bleu à l'écran) n'est pas exporté.
-- `appliquer.py` **déduit** le type du **préfixe du pseudo** via
-  `type_from_pseudo()` : `p.split("_")[0]`, et si ce préfixe n'est pas dans
-  `TYPES = [PERSONNE, LIEU, ORG, PRODUIT, EMAIL, TEL]`, il renvoie `PRODUIT` par
-  défaut.
-- Donc un pseudo parlant (`CONSULTANT_1`, `SOCIETE_1`) → préfixe inconnu →
-  typé `PRODUIT`, quel que soit le badge affiché dans l'éditeur.
-
-**Lien avec #8** : même racine (le pseudo porte seul l'information). Tant que le
-préfixe n'est pas un type reconnu, le type est faux.
-
-**Impact réel** : le **remplacement reste correct** (le type ne sert qu'à
-l'affichage/regroupement, pas au remplacement). Seule la métadonnée `type` de la
-table est erronée. Mais cette métadonnée compte pour la lisibilité, le tri, et
-un éventuel traitement par type.
-
-**Correctif possible** (à trancher avec #8 et #14) :
-- soit l'éditeur **écrit explicitement le type** dans le YAML (changement de
-  format de l'`alias.yaml`),
-- soit on impose que le préfixe du pseudo SOIT un type de `TYPES` (mais cela
-  interdit les pseudos parlants comme `CONSULTANT_1`).
-
-**Sévérité** : métadonnée erronée, non bloquante pour l'anonymisation.
-Identifié le 14/06/2026.
-
 ---
 
-## Architecture (structurant — à cadrer avant tout code)
-
-### 14. ★ PRIORITAIRE — Refondre le modèle de persistance (alias.yaml + table.json)
-**Problème** : deux fichiers se recoupent partiellement et créent des frictions
-et des pertes d'information.
-
-- `alias.yaml` : configuration **éditée à la main** (entrée). Contient les
-  forçages (`forcer:`), les faux positifs (`ignorer:`), les locuteurs génériques,
-  les réglages.
-- `table_correspondance.json` : artefact **généré** par `appliquer.py` (sortie).
-  Contient pseudo + `canonique` + `variantes` + `type` + `compteurs` + `client`.
-  Sur-ensemble de ce qui a été remplacé (détection auto **+** forçages).
-
-**Frictions constatées (14/06/2026)** :
-1. **Redondance gênante** : la correspondance pseudo↔variantes existe dans les
-   deux ; éditer l'un ne met pas l'autre à jour → divergence possible.
-2. **« Ne pas éditer le JSON » est intenable en pratique** : quand le JSON
-   contient des erreurs (cf. types faux, #13), regénérer coûte une passe
-   complète (detecter → éditeur → appliquer) ET, tant que les bugs ne sont pas
-   corrigés, rejoue les mêmes erreurs. Éditer le JSON à la main est alors plus
-   simple. → La table doit être **éditable** sans tabou.
-3. **Perte d'information inter-séances (le point le plus fort)** : les
-   `ignorer:` (faux positifs : « Ancienneté », politesses, lieux communs) sont
-   **réutilisables d'une séance à l'autre**, mais ils vivent dans le YAML, **ne
-   sont pas** dans la table JSON (rien n'a été remplacé), et `--table` ne
-   réinjecte que le JSON. → On re-trie les mêmes faux positifs à chaque
-   transcript. La mémoire inter-séances est donc bancale : les pseudos se
-   réutilisent, mais pas les décisions de tri.
-
-**Pistes à évaluer (décision d'archi, non tranchée)** :
-- **Piste A — Mémoire client unique** : un seul artefact réutilisable par client
-  (pseudos + canoniques + faux positifs + génériques + types), éditable et
-  versionnable. Le YAML par transcript ne porte que les forçages spécifiques et
-  alimente cette mémoire.
-- **Piste B — Deux fichiers mais cohérents** : la table JSON mémorise AUSSI les
-  `ignorer:`/`generiques:` (même sans remplacement), et `--table` les réinjecte.
-  On garde la séparation entrée/sortie sans perte d'info.
-- **Piste C — Tout dans le YAML** : le YAML porte toute la mémoire (forçages +
-  ignorer + génériques + table apprise) ; le JSON devient un export jetable.
-
-**Impacts** : touche `detecter.py`, `appliquer.py`, `editeur_alias.html`,
-`reconcilier.py`, le `SCHEMA.md`, ET la dé-anonymisation (#12). C'est le **format
-d'échange central** du pipeline.
-
-**Dépendances** : à arbitrer AVANT ou EN MÊME TEMPS que #8 et #13 (le sort du
-« type » et des pseudos parlants dépend du format retenu). Conditionne aussi #12
-(quelle source pour le canonique du retour).
-
-**Décision actée le 14/06/2026** : la table JSON **peut** être éditée à la main
-pour des corrections ponctuelles (types, canonique), en attendant cette refonte.
-Ce n'est pas un fichier sacré — la précaution est de ne pas l'écraser par un
-re-run involontaire.
-
----
-
-## Fait
-
-### 18. Orchestrateur multi-entretiens : vision permanente + exécution auto (16/06/2026)
-**Besoin** : disposer en permanence de l'état du pipeline **par entretien** (le
-tableau d'avancement) et **réaliser automatiquement ce qui peut l'être** —
-transcription auto, découpage auto une fois le `plan_de_coupe.json` généré,
-anonymisation auto une fois l'analyse **validée**. S'appuie sur la mémoire par
-projet (#15, `entretien.json`).
-
-**Livré** :
-- `tools/orchestrateur/etat.py` — moteur d'état **lecture seule** : scanne un
-  périmètre, calcule par entretien l'état de chaque étape + la **prochaine
-  action** (auto vs humain), en réconciliant le système de fichiers (autoritaire)
-  avec `entretien.json`. Rendus `table` / `json` / `md` (`ETAT.md`).
-- `tools/orchestrateur/sync.py` — aligne les `entretien.json` sur la réalité du
-  disque (**upgrade-only** : ne retrograde jamais, préserve horodatages/logs).
-  Corrige la mémoire par projet pour les étapes faites « ailleurs » (migration,
-  version antérieure).
-- `scripts/orchestrer.ps1` — **tick** idempotent : sync + tableau + `ETAT.md` +
-  exécution de l'automatisable. `couper`/`anonymiser` en synchrone (rapides) ;
-  `transcrire` en arrière-plan, **une seule à la fois** (verrou +
-  détection de l'`en_cours`, y compris un run lancé hors orchestrateur). Un
-  **échec n'est pas relancé** automatiquement (signalé). Options `-DryRun`,
-  `-NoTranscribe`, `-NoEtatMd`.
-- `scripts/veille.ps1` — surveillance **continue** : boucle terminal
-  (`-Intervalle`, `-Clair`) **et** tâche planifiée Windows
-  (`-Installer`/`-IntervalleMin`/`-Desinstaller`/`-Statut`). Tick partagé +
-  verrou commun → activer les deux est redondant mais sans danger.
-- `scripts/_tache.ps1` — lanceur de la tâche planifiée : journalise chaque tick
-  (`logs/orchestrer-tache.log`) et force le **mode transcription INLINE**.
-- `ia.ps1` — nouvelles commandes `ia tableau` / `ia orchestrer` / `ia veille`.
-
-**Gotcha planificateur (résolu)** : une transcription lancée en process *détaché*
-(`Start-Process`) par la tâche est **tuée par le planificateur à la fin du tick**.
-D'où `orchestrer -TranscribeInline` (transcription **synchrone** dans le process
-du tick) utilisé par la tâche ; `MultipleInstances=IgnoreNew` empêche le
-chevauchement. La **sérialisation est auto-réparante** : un `en_cours` sans
-verrou actif (PID vivant) est considéré périmé et **repris** aux tronçons déjà
-sauvegardés (validé : reprise de Nicolas au tronçon 2 après kill du batch).
-
-**Chaînon manquant résolu** : l'étape `analyser` (validation humaine des entités)
-est la seule non automatisable, et ne laissait **aucune trace**. `serveur_editeur.py`
-**estampille désormais le `.etat.json`** (`validation.faite=true` + horodatage) à
-l'export réussi de la mémoire. C'est cette trace qui **déclenche
-l'anonymisation automatique** — pas la simple présence de la détection.
-
-Outils touchés : `serveur_editeur.py` (trace de validation), `etat.py` (nouveau),
-`sync.py` (nouveau), `orchestrer.ps1` (nouveau), `veille.ps1` (nouveau), `ia.ps1`,
-`README.md`, `scripts/GUIDE-USAGE.md`.
-
-> Validé sous Windows le 16/06/2026 : tableau, couper auto (Vanessa 1),
-> sérialisation transcription, sync, cycle install/désinstall de la tâche planifiée.
-
-### 14 + 8 + 13 + 7 + 12 + 17. Refonte du modèle de persistance (16/06/2026)
-Format de persistance unifié (**piste A2**) : un **artefact unique par client**
-`memoire_client.json` (remplace `alias.yaml` + `table_correspondance.json`) +
-un `config/ignorer_global.json` partagé (faux positifs universels). Format
-**JSON**. Logique centralisée dans le nouveau module `tools/anonymisation/memoire.py`.
-
-Résolu d'un bloc :
-- **#14** (refonte persistance) : un seul fichier, éditable, mémorisant pseudos
-  + canoniques + variantes + types + faux positifs (client ET global) +
-  génériques. Les `ignorer`/`generiques` survivent désormais entre séances
-  (friction #14.3 levée).
-- **#8** (corruption pseudos non numérotés) : l'éditeur n'impose plus `_<chiffre>`
-  ; pseudos parlants (`SOCIETE`, `CONSULTANT_1`) pleinement valides. Export via
-  `JSON.stringify` (plus de générateur YAML bricolé).
-- **#13** (type perdu → PRODUIT) : `type` est un **champ explicite** par entrée,
-  écrit par l'éditeur, lu tel quel par `appliquer.py`.
-- **#7** (génériques non exportés) : UI dédiée dans l'éditeur (bouton
-  « + Locuteur générique » + section), inclus à l'export.
-- **#17** (fusion alias existant + nouvelles détections) : l'éditeur charge la
-  mémoire du périmètre PUIS fusionne les nouvelles détections (`mergeFromState`),
-  sans écraser les regroupements existants.
-- **#12** (dé-anonymisation) : nouveau script `desanonymiser.py` (mapping inverse
-  pseudo → canonique, pseudos longs d'abord, formats .txt/.md/.srt/.docx).
-
-Outils touchés : `memoire.py` (nouveau), `migrer.py` (nouveau, conversion
-ancien→nouveau), `desanonymiser.py` (nouveau), `detecter.py`, `appliquer.py`,
-`reconcilier.py`, `editeur_alias.html`, `serveur_editeur.py`, `anonymisation.ps1`,
-`_commun.ps1`, `SCHEMA.md`. Rétrocompatibilité : `--alias`/`--table` encore
-acceptés (migration à la volée) ; `migrer.py` convertit définitivement.
-
-> ⚠️ Reste à valider sous Windows : les `.ps1` (syntaxe non vérifiable hors
-> PowerShell) et l'éditeur en mode serveur (Chrome + serveur_editeur.py).
-
-
-### 15. `entretien.json` + logging centralisé (16/06/2026)
-Fichier projet `entretien.json` à la racine de chaque entretien
-(statut/horodatage/durée par étape + chemin du log), schéma documenté dans
-`scripts/SCHEMA-entretien.md`. Logging à deux niveaux : log verbeux centralisé
-dans `<repo>/logs/` (capture stdout+stderr, affichage temps réel via
-`Tee-Object`), résumé dans `entretien.json`. **Tous** les wrappers instrumentés
-(`transcrire`, `taguer`, `couper`, et `anonymiser` pour ses trois sous-actions
-`detecter`/`appliquer`/`repersonnaliser`) ; nouvelle commande `ia etat`.
-Déclencheur : un run nocturne échoué et indébogable (terminal fermé, aucune trace).
-
-Limite connue (acceptée) : écriture de `entretien.json` sans verrou — sûr en
-usage séquentiel.
-
-Détail `anonymiser` : les trois sous-actions loggent sous l'étape
-`anonymisation` (`details.sous_etape`). `appliquer` porte le statut final
-(`fait`/`echec`) ; `detecter` laisse `en_cours` (validation humaine à suivre) ;
-`repersonnaliser` (post-traitement inverse #12) est tracé sans redéfinir
-l'avancement du cycle. La dette de fusion #14↔#15 est ainsi résolue.
-
-### 4. Scripts wrapper + commande `ia` (15/06/2026)
-Industrialisation du pipeline réalisée. Commande unique `ia` (dispatcher +
-fonction de profil PowerShell), wrappers `transcrire` / `taguer` / `couper` /
-`anonymiser` dans `scripts/`. Arborescence constante par entretien
-(`1_transcription/`, `2_coupe/`, `3_anonymisation/`). alias + table partagés au
-niveau d'un « périmètre » trouvé par **recherche ascendante**. Les wrappers
-ciblent le `python.exe` du venv en absolu (plus besoin d'activer le venv ;
-`ia setenv` le fait à la demande). Voir `scripts/GUIDE-USAGE.md`.
-
-Évolutions de fond apportées au passage :
-- `transcribe_robuste.py` : option `--outdir` (rétrocompatible).
-- `tagger.html` : mode serveur (chargement auto audio + srt, export groupé
-  cohérent vers `2_coupe/`, heartbeat) + repli File System Access API / fichier.
-- `editeur_alias.html` : mode serveur (chargement auto etat/alias, écriture de
-  l'alias au périmètre, heartbeat) + repli fichier.
-- Nouveaux : `serveur_tagueur.py`, `serveur_editeur.py` (serveurs locaux
-  127.0.0.1, arrêt par heartbeat à la fermeture de l'onglet).
-
----
-
-## Industrialisation / automatisation (suite)
+## Industrialisation / automatisation
 
 ### 16. Serveur tagueur — support des Range requests (lecture audio)
 **Besoin** : `serveur_tagueur.py` sert l'audio en bloc (`Accept-Ranges: none`).
@@ -473,16 +186,15 @@ Sur de gros fichiers, le *seek* dans `<audio controls>` peut être limité.
 serveur. À valider d'abord sur un vrai entretien : peut-être inutile selon le
 format. Identifié le 15/06/2026.
 
-### 17. Éditeur d'alias — fusion alias existant + nouvelles détections
-**Constat** : en mode serveur, si un `alias.yaml` existe déjà au périmètre, on
-le charge **sans** y fusionner les entités nouvellement détectées dans le
-nouvel entretien (l'éditeur ne sait pas fusionner ; il charge l'un OU l'autre).
-**Conséquence** : pour un nouvel entretien sur un périmètre existant, les
-nouvelles entités ne remontent pas automatiquement dans l'éditeur.
-**Piste** : fusionner `loadFromYaml` (alias existant) et `loadFromState`
-(nouvelles détections) sans doublon. Lié à l'item #14 (modèle de persistance).
-Identifié le 15/06/2026.
+### 19. Porter les réglages batterie dans `veille.ps1 -Installer`
+**Besoin** : la tâche planifiée installée par `veille.ps1 -Installer` hérite des
+défauts `DisallowStartIfOnBatteries=$true` / `StopIfGoingOnBatteries=$true` →
+elle ne tourne pas / est tuée sur batterie. Ces réglages ont été corrigés **à la
+main** sur la tâche en service (17/06) mais **pas dans l'installateur** : une
+réinstallation reviendrait au comportement bloquant.
 
----
+**Piste** : dans le bloc `if ($Installer)`, après `New-ScheduledTaskSettingsSet`,
+forcer `$settings.DisallowStartIfOnBatteries = $false` et
+`$settings.StopIfGoingOnBatteries = $false` avant le `Register-ScheduledTask`.
 
-
+**Sévérité** : mineure mais piège à la réinstallation. Identifié le 17/06/2026.
