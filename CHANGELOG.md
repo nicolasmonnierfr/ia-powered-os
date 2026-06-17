@@ -9,6 +9,29 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.9.0] — 2026-06-17
+
+### Ajouté
+- **Réconciliation automatique des locuteurs entre tronçons (empreinte vocale)** :
+  nouveau `tools/transcription/reconcilier.py`. La diarisation tournant par
+  tronçon produit des étiquettes locales sans lien (`T1-A` ≠ `T2-A`), ce qui
+  imposait un recollage **100 % manuel** (1re étape du tagueur). Le script extrait
+  une **empreinte vocale** par étiquette locale depuis les tronçons WAV
+  (`data/.chunks/`), regroupe les voix identiques (clustering agglomératif sur
+  distance cosinus, clusters ordonnés par 1re prise de parole) et écrit une
+  suggestion `1_transcription/<nom>.reconcile.json` (mapping + **confiance** par
+  étiquette). Modèle par défaut `speechbrain/spkrec-ecapa-voxceleb` (repli
+  `pyannote/embedding`, surchargeable via `EMBEDDING_MODEL`).
+- **Tagueur — panneau de réconciliation pré-rempli** : `serveur_tagueur.py`
+  expose la suggestion dans `/api/manifest` (uniquement pour le transcript brut) ;
+  `tagger.html` amorce le mapping, affiche un **bandeau récapitulatif** et un
+  **badge de confiance** par étiquette (● sûr / moyen / incertain), et fixe le
+  nombre de locuteurs suggéré. L'humain vérifie puis applique (philosophie
+  identifier/analyser : pré-remplissage + validation).
+- **Commande `ia reconcilier`** (`scripts/reconcilier.ps1`, option `-Speakers`).
+  `ia taguer` la déclenche automatiquement si la suggestion manque ; `ia taguer
+  -NoReconcile` pour l'éviter.
+
 ## [1.8.0] — 2026-06-17
 
 ### Ajouté
@@ -394,6 +417,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.9.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.9.0
 [1.8.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.8.0
 [1.7.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.7.0
 [1.6.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.1

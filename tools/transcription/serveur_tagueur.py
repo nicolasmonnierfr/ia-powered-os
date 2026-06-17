@@ -120,6 +120,26 @@ def trouver_memoire(depart: Path):
         cur = cur.parent
 
 
+def trouver_reconcile(root: Path, srt):
+    """Suggestion de reconciliation auto par empreinte vocale (reconcilier.py).
+    Pertinente UNIQUEMENT pour le transcript brut (etiquettes locales T<n>-X) :
+    on ne la renvoie pas quand on sert la version coupee (vrais noms). Cherche
+    <stem>.reconcile.json a cote du .srt servi, sinon dans 1_transcription/."""
+    if srt is None or srt.parent.name == "2_coupe":
+        return None
+    cands = [srt.with_suffix(".reconcile.json")]
+    trans = root / "1_transcription"
+    if trans.is_dir():
+        cands += sorted(trans.glob("*.reconcile.json"))
+    for c in cands:
+        if c.is_file():
+            try:
+                return json.loads(c.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                return None
+    return None
+
+
 def noms_locuteurs_connus(root: Path):
     """Noms de personnes deja connus du client (via memoire_client.json en
     ascendant), pour pre-remplir le nommage des locuteurs -> meme personne =
@@ -189,6 +209,7 @@ def make_handler(etat: Etat):
                 "srt_dir": (str(srt.parent.relative_to(etat.root)) if srt else None),
                 "locuteurs_connus": noms_locuteurs_connus(etat.root),
                 "reference": audio_reference(etat.root),
+                "reconcile": trouver_reconcile(etat.root, srt),
             })
 
         def _audio(self):

@@ -14,6 +14,7 @@ modèles WhisperX/pyannote).
 |---------|------|
 | `transcribe.py` | Transcription simple → `.txt`, `.srt`, `.json` (audios courts) |
 | `transcribe_robuste.py` | Transcription d'audios **longs** : tronçons + reprise sur interruption |
+| `reconcilier.py` | **Réconciliation automatique** des locuteurs entre tronçons par **empreinte vocale** (pré-remplit le tagueur) |
 | `tagger.html`   | Lecteur audio + transcription synchronisée + tagging des locuteurs + **édition du texte** + **coupe de passages** |
 | `couper_audio.py` | Reconstruit l'audio **raccourci** à partir du plan de coupe exporté par le tagueur (ffmpeg) |
 
@@ -111,6 +112,31 @@ ouvre automatiquement un **panneau de réconciliation** :
 
 Le bouton **Réconcilier** (en bas) rouvre ce panneau à tout moment. Après
 application, tu peux corriger les segments isolés avec le tagging habituel.
+
+#### Pré-réconciliation automatique par empreinte vocale (`reconcilier.py`)
+Avant d'ouvrir le tagueur, `ia taguer` lance automatiquement `reconcilier.py`
+(si pas déjà fait) : il extrait une **empreinte vocale** de chaque locuteur
+local (`T1-A`, `T2-B`…) à partir des tronçons WAV conservés dans
+`data/.chunks/`, puis **regroupe les voix identiques** entre tronçons
+(clustering sur distance cosinus). Le panneau de réconciliation s'ouvre alors
+**déjà pré-rempli**, avec un indicateur de confiance par étiquette :
+- **● sûr** (vert) / **● moyen** (ambre) / **● incertain** (rouge).
+
+Tu n'as plus qu'à **vérifier** (surtout les « incertain ») puis **Appliquer**.
+Philosophie identique à `identifier`/`analyser` : on pré-remplit, l'humain
+valide — on ne se fie pas aveuglément à la reconnaissance vocale (voix proches,
+segments courts).
+
+```powershell
+ia reconcilier              # (re)génère la suggestion ; nb de locuteurs estimé
+ia reconcilier -Speakers 2  # force le nombre de locuteurs
+ia taguer -NoReconcile      # ouvre le tagueur sans pré-réconciliation auto
+```
+
+> La suggestion est écrite dans `1_transcription/<nom>.reconcile.json`. Le
+> modèle d'empreinte par défaut est `speechbrain/spkrec-ecapa-voxceleb` (repli
+> automatique sur `pyannote/embedding`) ; surchargeable via `EMBEDDING_MODEL`
+> dans `config/.env`. Premier lancement : téléchargement du modèle (une fois).
 
 ### Deux modes de tagging
 - **Par segment** : sélectionner un segment, cliquer Loc 1 / Loc 2 (ou touche

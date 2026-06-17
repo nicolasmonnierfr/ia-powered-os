@@ -6,6 +6,7 @@
 #
 # Commandes :
 #   ia transcrire [audio] [-NoDiarize] [-ChunkMin n] ...
+#   ia reconcilier [-Speakers n]  # pre-reconcilie les locuteurs entre troncons (empreinte vocale)
 #   ia taguer [-Port n] [-NoBrowser]
 #   ia couper [plan] [-Audio f]
 #   ia identifier        # pre-analyse AUTO : detection NER -> candidats .etat.json
@@ -40,6 +41,7 @@ function Show-Aide {
     Write-Host "  (a lancer depuis le repertoire racine d'un entretien)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  ia transcrire [audio]            " -NoNewline -ForegroundColor Green; Write-Host "Transcrit -> 1_transcription\"
+    Write-Host "  ia reconcilier                   " -NoNewline -ForegroundColor Green; Write-Host "Pre-reconcilie les locuteurs entre troncons (empreinte vocale)"
     Write-Host "  ia taguer                        " -NoNewline -ForegroundColor Green; Write-Host "Ouvre le tagueur (audio+srt charges) -> 2_coupe\"
     Write-Host "  ia couper [plan]                 " -NoNewline -ForegroundColor Green; Write-Host "Reconstruit l'audio coupe -> 2_coupe\"
     Write-Host "  ia identifier                    " -NoNewline -ForegroundColor Green; Write-Host "Pre-analyse AUTO : detection NER -> candidats"
@@ -95,8 +97,9 @@ function Show-Etat {
 
 # Wrappers simples : commande -> script.
 $map = @{
-    "transcrire" = "transcrire.ps1"
-    "taguer"     = "taguer.ps1"
+    "transcrire"  = "transcrire.ps1"
+    "reconcilier" = "reconcilier.ps1"
+    "taguer"      = "taguer.ps1"
     "couper"     = "couper.ps1"
     "orchestrer" = "orchestrer.ps1"
     "veille"     = "veille.ps1"

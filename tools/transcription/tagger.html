@@ -174,6 +174,15 @@
   .rec-choices { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; }
   .rec-choice { padding: 6px 12px; font-size: 12px; }
   .rec-choice.chosen { background: var(--playing); border-color: var(--playing-edge); }
+  /* Pre-reconciliation par empreinte vocale (reconcilier.py) */
+  .rec-banner { font-size: 12.5px; color: var(--ink); background: var(--panel-2);
+    border: 1px solid var(--line); border-left: 3px solid var(--playing-edge);
+    border-radius: 8px; padding: 8px 12px; }
+  .rec-warn { color: #e0a23a; font-weight: 600; }
+  .rec-conf { margin-left: 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .rec-conf-high { color: #5ec27a; }
+  .rec-conf-medium { color: #e0a23a; }
+  .rec-conf-low { color: #e06a5a; }
   .recon-foot {
     padding: 14px 22px; border-top: 1px solid var(--line);
     display: flex; gap: 10px; justify-content: flex-end;
@@ -1236,10 +1245,12 @@
     const labels = parsed.labels;
 
     if (labels.length > 0 && areLocalLabels(labels)) {
-      // Etiquettes locales par troncon -> mode reconciliation manuel.
-      // Nombre de locuteurs par DEFAUT = ce que la diarisation a trouve
-      // (clampe a [2, MAX] : le selecteur propose 2..4).
-      nSpeakers = Math.min(Math.max(speakersFromLocalLabels(labels) || 2, 2), MAX);
+      // Etiquettes locales par troncon -> mode reconciliation (pre-rempli si une
+      // suggestion par empreinte vocale est disponible, sinon manuel).
+      // Nombre de locuteurs par DEFAUT = celui suggere par reconcilier.py, sinon
+      // ce que la diarisation a trouve (clampe a [2, MAX] : le selecteur propose 2..4).
+      const suggN = (reconcileSuggestion && reconcileSuggestion.speakers) ? reconcileSuggestion.speakers : 0;
+      nSpeakers = Math.min(Math.max(suggN || speakersFromLocalLabels(labels) || 2, 2), MAX);
       const sc = document.getElementById("speakerCount");
       if (sc) sc.value = String(nSpeakers);
       selected = segments.length ? 0 : -1;
@@ -1310,6 +1321,7 @@
     try {
       const man = await (await fetch("/api/manifest")).json();
       locuteursConnus = man.locuteurs_connus || [];   // pre-remplissage des noms (coherence inter-entretiens)
+      reconcileSuggestion = man.reconcile || null;     // pre-remplissage de la reconciliation (empreinte vocale)
       if (man.reference) { const r = document.getElementById("refName"); if (r) r.textContent = "🎧 " + man.reference; }
       // Audio
       if (man.audio) {
@@ -1816,6 +1828,9 @@
   // Quand le SRT porte des etiquettes locales par troncon (T1-A, T2-B...),
   // on mappe chaque locuteur local vers un locuteur global (Loc 1..N).
   let reconcileMap = {};   // { "T1-A": 0, "T2-A": 1, ... }  (global index ou undefined)
+  // Suggestion AUTO par empreinte vocale (reconcilier.py, via /api/manifest) :
+  // { speakers, map:{label->global}, labels:[{label,confidence,sim_own,...}] }.
+  let reconcileSuggestion = null;
 
   function firstSegmentForLabel(label) {
     return segments.find(s => s.label === label) || null;
@@ -1827,8 +1842,28 @@
     const list = document.getElementById("reconcileList");
     list.innerHTML = "";
 
+    // Pre-remplissage AUTO par empreinte vocale (reconcilier.py) si dispo : on
+    // amorce reconcileMap et on garde la confiance par etiquette pour l'afficher.
+    const sugg = (reconcileSuggestion && reconcileSuggestion.map) ? reconcileSuggestion : null;
+    const confByLabel = {};
+    if (sugg) {
+      (sugg.labels || []).forEach(l => { confByLabel[l.label] = l; });
+      localLabels.forEach(l => {
+        const g = sugg.map[l];
+        if (typeof g === "number" && g >= 0 && g < nSpeakers) reconcileMap[l] = g;
+      });
+      const auto = localLabels.filter(l => reconcileMap[l] !== undefined).length;
+      const lows = localLabels.filter(l => confByLabel[l] && confByLabel[l].confidence === "low").length;
+      const banner = document.createElement("div");
+      banner.className = "rec-banner";
+      banner.innerHTML = `🔎 Pré-réconciliation par empreinte vocale : <b>${auto}/${localLabels.length}</b> étiquette(s) pré-assignée(s)`
+        + (lows ? ` — <span class="rec-warn">${lows} à vérifier à l'oreille</span>` : ` — vérifiez puis Appliquer`) + `.`;
+      list.appendChild(banner);
+    }
+
     localLabels.forEach(label => {
       const seg = firstSegmentForLabel(label);
+      const conf = confByLabel[label] || null;
       const row = document.createElement("div");
       row.className = "rec-row";
       row.dataset.label = label;
@@ -1836,6 +1871,14 @@
       const id = document.createElement("div");
       id.className = "rec-id";
       id.textContent = label;
+      if (conf) {
+        const badge = document.createElement("span");
+        badge.className = "rec-conf rec-conf-" + conf.confidence;
+        badge.title = `similarité ${conf.sim_own}, marge ${conf.margin}`;
+        badge.textContent = conf.confidence === "high" ? "● sûr"
+                          : conf.confidence === "medium" ? "● moyen" : "● incertain";
+        id.appendChild(badge);
+      }
 
       const listen = document.createElement("button");
       listen.className = "btn rec-listen";
@@ -1860,6 +1903,7 @@
         b.className = "btn rec-choice";
         b.style.borderColor = locVar(g);
         b.innerHTML = `<span class="dot" style="background:${locVar(g)}"></span>${names[g]}`;
+        if (reconcileMap[label] === g) b.classList.add("chosen");   // pre-rempli (empreinte)
         b.addEventListener("click", () => {
           reconcileMap[label] = g;
           row.querySelectorAll(".rec-choice").forEach(x => x.classList.remove("chosen"));

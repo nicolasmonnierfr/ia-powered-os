@@ -19,6 +19,7 @@
 param(
     [int]$Port = 8765,
     [switch]$NoBrowser,
+    [switch]$NoReconcile,   # ne pas pre-reconcilier les locuteurs (empreinte vocale)
     [string]$Find        # ouvre le tagueur PILE sur ce terme (saut + lecture)
 )
 
@@ -29,6 +30,22 @@ $python  = Get-PythonExe -RepoHome $repo
 $serveur = Get-Tool -RepoHome $repo "tools\transcription\serveur_tagueur.py"
 $tagger  = Get-Tool -RepoHome $repo "tools\transcription\tagger.html"
 $root    = Get-EntretienRoot
+
+# Pre-reconciliation AUTO des locuteurs entre troncons (empreinte vocale) : si le
+# transcript brut existe (1_transcription\*.srt, etiquettes locales) sans
+# suggestion deja calculee, on la genere maintenant pour pre-remplir la 1re etape
+# du tagueur. Non bloquant : en cas d'echec, le tagueur reste en mode manuel.
+if (-not $NoReconcile) {
+    $trans = Join-Path $root "1_transcription"
+    if (Test-Path -LiteralPath $trans) {
+        $hasSrt = @(Get-ChildItem -LiteralPath $trans -File -Filter *.srt -EA SilentlyContinue).Count -gt 0
+        $hasRec = @(Get-ChildItem -LiteralPath $trans -File -Filter *.reconcile.json -EA SilentlyContinue).Count -gt 0
+        if ($hasSrt -and -not $hasRec) {
+            Write-Info "Pré-réconciliation des locuteurs (empreinte vocale)... (1re fois : peut être long)"
+            try { & (Join-Path $PSScriptRoot "reconcilier.ps1") -Quiet } catch { Write-Avert "Réconciliation auto ignorée : $_" }
+        }
+    }
+}
 
 # Verification minimale : un audio doit etre present a la racine.
 try { $audio = Find-Audio } catch { Write-Avert $_ }
