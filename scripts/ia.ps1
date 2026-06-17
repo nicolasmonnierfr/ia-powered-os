@@ -46,7 +46,7 @@ function Show-Aide {
     Write-Host "  ia analyser                      " -NoNewline -ForegroundColor Green; Write-Host "Validation HUMAINE (editeur) -> memoire_client.json"
     Write-Host "  ia anonymiser                    " -NoNewline -ForegroundColor Green; Write-Host "Applique le remplacement -> 3_anonymisation\"
     Write-Host "  ia repersonnaliser [-Rapport f]  " -NoNewline -ForegroundColor Green; Write-Host "Reinjecte les vrais noms dans un rapport (#12)"
-    Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement de l'entretien courant (entretien.json)"
+    Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement detaille de l'entretien courant (workflow complet)"
     Write-Host "  ia tableau [perimetre]           " -NoNewline -ForegroundColor Green; Write-Host "Vue globale de tous les entretiens"
     Write-Host "  ia orchestrer [perimetre]        " -NoNewline -ForegroundColor Green; Write-Host "Une passe : tableau + execute l'automatisable"
     Write-Host "  ia veille [perimetre]            " -NoNewline -ForegroundColor Green; Write-Host "Surveillance continue (boucle / tache planifiee)"
@@ -74,38 +74,23 @@ function Invoke-Setenv {
 }
 
 function Show-Etat {
-    $p = Get-ProjetPath
-    if (-not (Test-Path -LiteralPath $p)) {
-        Write-Avert "Aucun entretien.json ici. Lance une commande (ex. ia transcrire) pour l'initialiser,"
-        Write-Info  "ou place-toi dans le repertoire racine d'un entretien."
+    # Vue detaillee de l'entretien courant, au niveau du workflow complet
+    # (transcrire -> taguer -> couper -> identifier -> analyser -> anonymiser).
+    # On s'appuie sur etat.py (SOURCE DE VERITE unique, alignee sur `ia tableau`)
+    # plutot que sur le seul entretien.json (3 etapes, sans identifier/analyser).
+    $root = Get-EntretienRoot
+    $hasAudio = @(Get-ChildItem -LiteralPath $root -File -ErrorAction SilentlyContinue |
+                  Where-Object { $AUDIO_EXTS -contains $_.Extension.ToLower() }).Count -gt 0
+    if (-not $hasAudio) {
+        Write-Avert "Aucun audio ici : place-toi dans le repertoire racine d'un entretien,"
+        Write-Info  "ou utilise 'ia tableau [perimetre]' pour la vue globale."
         return
     }
-    $projet = Read-Projet
-    Write-Host ""
-    Write-Host "Entretien : $($projet.entretien)" -ForegroundColor Cyan
-    Write-Host "Audio     : $($projet.audio)" -ForegroundColor Gray
-    Write-Host "Mis a jour: $($projet.maj_le)" -ForegroundColor Gray
-    Write-Host ""
-    $libelles = [ordered]@{ transcription = "Transcription"; coupe = "Coupe"; anonymisation = "Anonymisation" }
-    foreach ($k in $libelles.Keys) {
-        $e = $projet.etapes.$k
-        $couleur = switch ($e.statut) {
-            "fait"     { "Green" }
-            "en_cours" { "Yellow" }
-            "echec"    { "Red" }
-            default    { "DarkGray" }
-        }
-        $duree = if ($e.duree_sec) { " ($([int]$e.duree_sec)s)" } else { "" }
-        Write-Host ("  {0,-14} " -f $libelles[$k]) -NoNewline
-        Write-Host ("{0}{1}" -f $e.statut, $duree) -ForegroundColor $couleur
-        if ($e.statut -eq "echec" -and $e.message) {
-            Write-Host ("                 -> {0}" -f $e.message) -ForegroundColor Red
-        }
-        if ($e.log) {
-            Write-Host ("                 log: {0}" -f $e.log) -ForegroundColor DarkGray
-        }
-    }
-    Write-Host ""
+    $repo   = Get-RepoHome
+    $python = Get-PythonExe -RepoHome $repo
+    $etatPy = Join-Path $repo "tools\orchestrateur\etat.py"
+    if (-not (Test-Path -LiteralPath $etatPy)) { Write-Echec "etat.py introuvable : $etatPy"; return }
+    & $python $etatPy $root --format table
 }
 
 # Wrappers simples : commande -> script.

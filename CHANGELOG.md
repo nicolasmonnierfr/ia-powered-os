@@ -9,6 +9,21 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.6.1] — 2026-06-17
+
+### Modifié
+- **`ia etat`** affiche désormais l'avancement au niveau du **workflow complet**
+  (transcrire · taguer · couper · **identifier** · **analyser** · anonymiser) +
+  la prochaine action, au lieu des 3 étapes brutes de `entretien.json` (qui
+  masquaient la distinction identifier/analyser). S'appuie sur `etat.py` (source
+  de vérité unique, alignée sur `ia tableau`).
+- `etat.py` : nouveau **mode entretien** — quand le chemin contient lui-même un
+  audio, sortie détaillée d'un seul entretien (`--format table`/`json`).
+
+Outils : `etat.py`, `ia.ps1`.
+
+---
+
 ## [1.6.0] — 2026-06-17
 
 ### Ajouté — éditeur d'alias : surlignage + alerte homonymes
@@ -263,6 +278,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.6.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.1
 [1.6.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.0
 [1.5.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.1
 [1.5.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.0

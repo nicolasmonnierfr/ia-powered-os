@@ -316,6 +316,38 @@ def _cell_trans(e):
     return base
 
 
+def rendre_entretien(e) -> str:
+    """Vue DETAILLEE d'un seul entretien (pour `ia etat`), au niveau du workflow
+    courant : l'etat 'Analyse' est ici eclate en Identification (auto, detection
+    NER) + Analyse/validation (humaine)."""
+    an = e["analyse"]
+    identification = "fait" if an in ("detecte", "valide") else "a_faire"
+    validation = "valide" if an == "valide" else "a_faire"
+    etapes = [
+        ("Transcription",           _cell_trans(e)),
+        ("Tag (locuteurs)",         _cell(e["tag"])),
+        ("Coupe (audio)",           _cell(e["coupe"])),
+        ("Identification (auto)",   _cell(identification)),
+        ("Analyse / validation",    _cell(validation)),
+        ("Anonymisation",           _cell(e["anonymisation"])),
+    ]
+    w = max(len(n) for n, _ in etapes)
+    lignes = ["", f"=== Entretien : {e['dossier']} ===",
+              f"Audio : {e['audio'] or '(aucun)'}", ""]
+    for nom, val in etapes:
+        lignes.append(f"  {nom.ljust(w)}   {val}")
+    lignes.append("")
+    prochaine = ACTIONS[e["action"]]["label"]
+    qui = e["qui"]
+    note = f"  — {e['note']}" if e.get("note") else ""
+    lignes.append(f"  Prochaine action : {prochaine}"
+                  + (f"  [{qui}]" if qui != "-" else "") + note)
+    lignes.append("")
+    lignes.append("  Legende : OK=fait  --=a faire  ..=en cours  ~~=detecte  !!=echec")
+    lignes.append("")
+    return "\n".join(lignes)
+
+
 def rendre_table(rapport) -> str:
     ents = rapport["entretiens"]
     lignes = []
@@ -413,6 +445,20 @@ def main():
     if not perimetre.is_dir():
         print(f"[ERREUR] Perimetre introuvable : {perimetre}", file=sys.stderr)
         sys.exit(1)
+
+    # Mode ENTRETIEN : si le chemin contient lui-meme un audio, on detaille ce
+    # seul entretien (pour `ia etat`), au niveau identifier/analyser.
+    if trouver_audio(perimetre) is not None:
+        e = etat_entretien(perimetre)
+        rendu = (json.dumps(e, ensure_ascii=False, indent=2)
+                 if args.format == "json" else rendre_entretien(e))
+        print(rendu)
+        if args.out:
+            try:
+                Path(args.out).write_text(rendu + "\n", encoding="utf-8")
+            except OSError as ex:
+                print(f"[AVERT] Ecriture {args.out} impossible : {ex}", file=sys.stderr)
+        return
 
     rapport = scanner_perimetre(perimetre)
 
