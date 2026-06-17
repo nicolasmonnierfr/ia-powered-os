@@ -114,7 +114,7 @@ if ($Installer) {
     $perim = (Resolve-Path -LiteralPath $Perimetre).Path
     # Deux taches independantes : la transcription (longue, inline) ne bloque pas
     # le rafraichissement de ETAT.md (tache "Etat", legere et frequente).
-    Register-Tache -Nom $TacheNom  -Lanceur $lanceurTache -Perim $perim -IntervalleMin $IntervalleMin
+    Register-Tache -Nom $TacheNom  -Lanceur $lanceurTache -Perim $perim -IntervalleMin $IntervalleMin -Silencieux
     Register-Tache -Nom $TacheEtat -Lanceur $lanceurEtat  -Perim $perim -IntervalleMin $IntervalleEtatMin -Silencieux
     Write-Ok "Taches planifiees installees :"
     Write-Info "  '$TacheNom'  (transcription INLINE + couper/anonymiser) : toutes les $IntervalleMin min"

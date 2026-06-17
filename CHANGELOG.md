@@ -27,12 +27,15 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
 - **Nombre de locuteurs par défaut = celui de la diarisation** : déduit des
   étiquettes locales `T<tronçon>-<lettre>` (max de voix distinctes par tronçon),
   clampé à [2, 4]. Avant : toujours 2 par défaut. `tagger.html`.
-- **Tâche « État » 100 % silencieuse** : plus aucune fenêtre de terminal au
-  rafraîchissement (toutes les 2 min). Lancement via `wscript.exe` + nouveau shim
-  `scripts/_silent.vbs` (fenêtre masquée, aucune console allouée), sans droits
-  admin (le logon S4U les aurait exigés). `veille.ps1` installe la tâche État avec
-  `-Silencieux`. La tâche en service a été basculée. Le `-WindowStyle Hidden`
-  seul laissait un bref flash à chaque tick.
+- **Tâches planifiées 100 % silencieuses** (État *et* Orchestrateur) : plus
+  aucune fenêtre de terminal qui s'ouvre (rafraîchissement toutes les 2 min,
+  ticks d'orchestration toutes les 5 min). Lancement via `wscript.exe` + nouveau
+  shim `scripts/_silent.vbs` (fenêtre masquée, aucune console allouée), sans
+  droits admin (le logon S4U les aurait exigés). Le shim **attend** la fin de la
+  commande (`sh.Run …,0,True`) → l'instance de tâche reste vivante pendant une
+  transcription inline (pas de process détaché tué en fin de tick). `veille.ps1`
+  installe les deux tâches avec `-Silencieux` ; les tâches en service ont été
+  basculées. Le `-WindowStyle Hidden` seul laissait un bref flash à chaque tick.
 
 ---
 
