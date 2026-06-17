@@ -66,6 +66,11 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
   **conservés à l'export** ; le groupe indique « +N hors fichier ».
 
 ### Modifié
+- **Tagueur — 2ᵉ groupe de boutons = navigation** : le groupe « Prise de parole »
+  (affectation jusqu'au prochain changement) est remplacé par « Aller à » —
+  boutons (et **Maj+N**) qui sautent à la **prochaine intervention du locuteur N**
+  (clics répétés = interventions suivantes, en boucle). On ne garde qu'**un seul**
+  bouton d'affectation par locuteur (« Affecter au locuteur », touche N).
 - **Éditeur d'alias — « Fusionner vers… » cliquable** : remplace le `prompt()`
   numéroté par une **liste cliquable** des groupes cibles (pseudo + type +
   variantes) ; un clic fusionne.

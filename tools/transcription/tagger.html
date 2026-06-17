@@ -256,12 +256,12 @@
 
 <div class="tag-controls">
   <div class="group-seg" id="groupSeg">
-    <span class="group-label">Segment</span>
+    <span class="group-label">Affecter au locuteur</span>
     <!-- boutons injectes -->
   </div>
   <span class="sep"></span>
   <div class="group-turn" id="groupTurn">
-    <span class="group-label">Prise de parole</span>
+    <span class="group-label">Aller à</span>
     <!-- boutons injectes -->
   </div>
   <span class="sep"></span>
@@ -274,7 +274,7 @@
   <span class="sep"></span>
   <button class="btn btn-ghost" data-action="prevturn" title="Aller au locuteur précédent (Alt+↑)">⏮ Locuteur</button>
   <button class="btn btn-ghost" data-action="nextturn" title="Aller au prochain changement de locuteur (Alt+↓)">Locuteur ⏭</button>
-  <span class="mode-hint">« Prise de parole » : affecte ce segment et tous les suivants jusqu'au prochain changement marqué. « Couper » : marque le(s) segment(s) sélectionné(s) comme à retirer (réversible). « Scinder » : divise un segment en deux au point de lecture, pour taguer chaque moitié à un locuteur différent.</span>
+  <span class="mode-hint">« Affecter au locuteur » : affecte le(s) segment(s) sélectionné(s). « Aller à » : saute à la prochaine intervention de ce locuteur (navigation, clics répétés = suivantes). « Couper » : marque le(s) segment(s) comme à retirer (réversible). « Scinder » : divise un segment en deux ; « Fusionner » : réunit la sélection.</span>
 </div>
 
 <div class="main">
@@ -338,7 +338,7 @@
   <dl>
     <dt>Espace</dt><dd>Lecture / pause</dd>
     <dt>1 … 4</dt><dd>Affecter le segment au locuteur N</dd>
-    <dt>Maj+1 … 4</dt><dd>Nouvelle prise de parole (ce segment + suivants)</dd>
+    <dt>Maj+1 … 4</dt><dd>Aller à la prochaine intervention du locuteur N</dd>
     <dt>0</dt><dd>Effacer l'affectation</dd>
     <dt>C</dt><dd>Couper / rétablir le(s) segment(s) sélectionné(s)</dd>
     <dt>S</dt><dd>Scinder le segment (fenêtre dédiée)</dd>
@@ -420,11 +420,12 @@
       groupSeg.appendChild(b);
 
       const t = document.createElement("button");
-      t.className = "btn";
+      t.className = "btn btn-ghost";
       t.style.borderColor = locVar(i);
-      t.dataset.action = "turn";
+      t.dataset.action = "goto";
       t.dataset.loc = i;
-      t.innerHTML = `<span class="kbd">Maj+${i+1}</span>→ ${names[i]}`;
+      t.title = `Aller à la prochaine intervention de ${names[i]}`;
+      t.innerHTML = `<span class="kbd">Maj+${i+1}</span>⏭ ${names[i]}`;
       groupTurn.appendChild(t);
     }
     buildStats();
@@ -894,10 +895,21 @@
       tagSegment(selected, loc);
       if (wasRange) { selAnchor = r.hi; select(Math.min(r.hi + 1, segments.length - 1), false, false); }
       else if (selected < segments.length - 1) select(selected + 1, false, false);
-    } else if (action === "turn") {
-      tagTurn(selected, loc);
+    } else if (action === "goto") {
+      gotoSpeaker(loc);   // navigation : prochaine intervention de ce locuteur
     }
   });
+
+  // Aller a la PROCHAINE intervention d'un locuteur donne (cycle en bouclant).
+  function gotoSpeaker(sp) {
+    if (segments.length === 0) return;
+    const start = selected < 0 ? -1 : selected;
+    for (let k = 1; k <= segments.length; k++) {
+      const i = ((start + k) % segments.length + segments.length) % segments.length;
+      if (segments[i].speaker === sp) { select(i, false, false); return; }
+    }
+    // aucun segment pour ce locuteur : rien a faire
+  }
 
   // ---- #3 : saut au prochain / precedent CHANGEMENT de locuteur ----
   // Depuis le segment courant, saute le « run » de segments du meme locuteur et
@@ -1148,16 +1160,16 @@
     if (e.key === "f" || e.key === "F") { mergeSelected(); return; }            // #2 : fusionner
     const num = parseInt(e.key, 10);
     if (!isNaN(num) && num >= 1 && num <= nSpeakers) {
+      if (e.shiftKey) { gotoSpeaker(num - 1); return; }   // Maj+N : aller a la prochaine intervention de N
       const r = selRange();
       const wasRange = r && r.lo !== r.hi;
-      if (e.shiftKey) { tagTurn(selected, num - 1); }
-      else { tagSegment(selected, num - 1); }
+      tagSegment(selected, num - 1);
       if (wasRange) {
         // apres avoir tague une plage, on se place a la fin de la plage et on reduit la selection
         const end = r.hi;
         selAnchor = end;
         select(Math.min(end + 1, segments.length - 1), false, false);
-      } else if (!e.shiftKey && selected < segments.length - 1) {
+      } else if (selected < segments.length - 1) {
         select(selected + 1, false, false);
       }
     }
