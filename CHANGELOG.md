@@ -9,9 +9,12 @@ parenthèses) et retiré du backlog.
 
 ---
 
-## [Non publié]
+## [1.7.0] — 2026-06-17
 
-Retours de test (tagueur). À consolider en version taguée une fois la salve finie.
+Salve de retours de test : refonte UX du tagueur (scinder/fusionner, navigation,
+lecture, libellés, minimap) et de l'éditeur d'alias (réécoute, fusion cliquable,
+nouveaux labels, masquage hors-fichier), correctifs audio/export, et tâches
+planifiées 100 % silencieuses.
 
 ### Corrigé
 - **Tagueur — minimap décalée (marques ET rectangle de visualisation)** : les
@@ -375,6 +378,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.7.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.7.0
 [1.6.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.1
 [1.6.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.0
 [1.5.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.1
