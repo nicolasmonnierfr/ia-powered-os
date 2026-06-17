@@ -10,28 +10,6 @@ contexte pour être repris sans rediscussion.
 
 ---
 
-## Tagueur (`tools/transcription/tagger.html`)
-
-### 5. Couper le 1er segment doit retirer tout le début de l'audio
-**Besoin** : quand les premiers segments sont coupés, le plan de coupe conserve
-quand même l'audio AVANT la 1re parole gardée (silence/bruit d'intro entre 0.0 et
-le `start` du 1er segment, qui n'est pas dans un intervalle coupé). Idem en fin.
-
-**Comportement à trancher** (description initiale contradictoire — à clarifier) :
-- soit **rogner** : le 1er `keep_interval` commence au 1er segment CONSERVÉ et le
-  dernier finit au dernier segment conservé (l'intro/outro hors parole gardée est
-  retirée) ;
-- soit **garder** l'intro/outro bruts (1er keep à 0.0, dernier keep à la durée
-  totale).
-
-**À cadrer avant de coder** : symétrie début/fin ; cohérence avec les timecodes
-du `.srt`/`.txt` exportés ; ne touche que la génération des `keep_intervals`
-(`buildCompactTimeline` dans tagger.html), pas `couper_audio.py`.
-
-**Sévérité** : mineure, non bloquante. Identifié le 14/06/2026.
-
----
-
 ## Anonymisation — éditeur d'alias / détection
 
 > Les timecodes par occurrence sont désormais propagés dans le `.etat.json`

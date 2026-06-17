@@ -1428,12 +1428,34 @@
       }
     }
 
-    // 2. Recalage des segments conserves : decalage = somme des coupes qui finissent avant le segment.
+    // 2. ROGNAGE début/fin (#5) : on retire aussi l'audio AVANT la 1re parole
+    // conservée et APRÈS la dernière (silence/bruit d'intro-outro, segments
+    // coupés en tête/queue). Le montage commence donc au 1er segment CONSERVÉ.
+    const audioEnd = segments[segments.length - 1].end;
+    const keptOnly = segments.filter(s => !s.cut);
+    const removed = cutIntervals.slice();
+    if (keptOnly.length) {
+      const firstStart = keptOnly[0].start;
+      const lastEnd = keptOnly[keptOnly.length - 1].end;
+      if (firstStart > 1e-6)        removed.push({ start: 0, end: firstStart });
+      if (lastEnd < audioEnd - 1e-6) removed.push({ start: lastEnd, end: audioEnd });
+    }
+    removed.sort((a, b) => a.start - b.start);
+    // Fusionner les chevauchements (le rognage de tête peut recouvrir une coupe).
+    const cuts = [];
+    for (const r of removed) {
+      const last = cuts[cuts.length - 1];
+      if (last && r.start <= last.end + 1e-6) last.end = Math.max(last.end, r.end);
+      else cuts.push({ start: r.start, end: r.end });
+    }
+
+    // 3. Recalage des segments conserves : decalage = somme des zones retirees
+    //    qui finissent avant le segment (coupes internes + rognage de tete).
     const kept = [];
     for (const seg of segments) {
       if (seg.cut) continue;
       let shift = 0;
-      for (const c of cutIntervals) {
+      for (const c of cuts) {
         if (c.end <= seg.start + 1e-6) shift += (c.end - c.start);
         else break;
       }
@@ -1446,17 +1468,16 @@
       });
     }
 
-    // 3. keepIntervals = complement des coupes sur [0, fin de l'audio].
-    const audioEnd = segments[segments.length - 1].end;
+    // 4. keepIntervals = complement des zones retirees sur [0, fin de l'audio].
     const keepIntervals = [];
     let cursor = 0;
-    for (const c of cutIntervals) {
+    for (const c of cuts) {
       if (c.start > cursor + 1e-6) keepIntervals.push({ start: cursor, end: c.start });
       cursor = Math.max(cursor, c.end);
     }
     if (cursor < audioEnd - 1e-6) keepIntervals.push({ start: cursor, end: audioEnd });
 
-    return { kept, keepIntervals, cutIntervals };
+    return { kept, keepIntervals, cutIntervals: cuts };
   }
 
   // --- Builders purs : produisent le CONTENU (reutilises par les exports

@@ -9,6 +9,18 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.5.1] — 2026-06-17
+
+### Corrigé
+- **#5** — Le montage de coupe **rogne le début et la fin** : l'audio coupé (et
+  ses timecodes) commence au 1ᵉʳ segment **conservé** et finit au dernier
+  (l'intro/outro hors parole gardée — silence, bruit, segments coupés en
+  tête/queue — est supprimée). Avant, le tout début (avant la 1ʳᵉ parole gardée)
+  restait dans le montage. `buildCompactTimeline` (tagger.html) ; timecodes
+  recalés en conséquence. Vérifié sur 4 scénarios.
+
+---
+
 ## [1.5.0] — 2026-06-17
 
 ### Ajouté — tagueur : scinder un segment + saut au changement de locuteur
@@ -234,6 +246,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.5.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.1
 [1.5.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.0
 [1.4.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.4.0
 [1.3.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.3.0
