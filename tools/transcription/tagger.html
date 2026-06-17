@@ -266,16 +266,16 @@
     <!-- boutons injectes -->
   </div>
   <span class="sep"></span>
-  <button class="btn btn-ghost" data-action="clear"><span class="kbd">0</span>Désaffecter</button>
+  <button class="btn btn-ghost" data-action="clear" title="Retire l'affectation de locuteur du/des segment(s) (segment « non affecté »)"><span class="kbd">0</span>🧽 Effacer</button>
   <span class="sep"></span>
-  <button class="btn btn-ghost" data-action="cut" id="btnCut" title="Marque le(s) segment(s) à retirer du montage final (réversible)"><span class="kbd">C</span>🧽 Effacer</button>
+  <button class="btn btn-ghost" data-action="cut" id="btnCut" title="Cache le(s) segment(s) : exclu(s) du montage final (réversible)"><span class="kbd">C</span>🙈 Cacher</button>
   <span class="sep"></span>
   <button class="btn btn-ghost" data-action="split" id="btnSplit" title="Diviser le segment en deux (diarisation ayant fusionné deux voix)"><span class="kbd">S</span>Scinder</button>
   <button class="btn btn-ghost" data-action="merge" id="btnMerge" title="Fusionner en un seul les segments sélectionnés (Maj+clic ou Maj+↑/↓ pour la plage)"><span class="kbd">F</span>Fusionner</button>
   <span class="sep"></span>
   <button class="btn btn-ghost" data-action="prevturn" title="Aller au locuteur précédent (Alt+↑)">⏮ Locuteur</button>
   <button class="btn btn-ghost" data-action="nextturn" title="Aller au prochain changement de locuteur (Alt+↓)">Locuteur ⏭</button>
-  <span class="mode-hint">« Affecter au locuteur » : affecte le(s) segment(s) sélectionné(s). « Aller à » : saute à la prochaine intervention de ce locuteur (navigation, clics répétés = suivantes). « Effacer » (🧽) : marque le(s) segment(s) à retirer du montage final (réversible). « Scinder » : divise un segment en deux ; « Fusionner » : réunit la sélection.</span>
+  <span class="mode-hint">« Affecter au locuteur » : affecte le(s) segment(s) sélectionné(s). « Aller à » : saute à la prochaine intervention de ce locuteur (navigation, clics répétés = suivantes). « Effacer » (🧽) : retire l'affectation de locuteur. « Cacher » (🙈) : exclut le(s) segment(s) du montage final (réversible). « Scinder » : divise un segment en deux ; « Fusionner » : réunit la sélection.</span>
 </div>
 
 <div class="main">
@@ -340,8 +340,8 @@
     <dt>Espace</dt><dd>Lecture / pause</dd>
     <dt>1 … 4</dt><dd>Affecter le segment au locuteur N</dd>
     <dt>Maj+1 … 4</dt><dd>Aller à la prochaine intervention du locuteur N</dd>
-    <dt>0</dt><dd>Désaffecter le locuteur (segment « non affecté »)</dd>
-    <dt>C</dt><dd>Effacer / rétablir le(s) segment(s) — retirer du montage final</dd>
+    <dt>0</dt><dd>Effacer l'affectation de locuteur (segment « non affecté »)</dd>
+    <dt>C</dt><dd>Cacher / rétablir le(s) segment(s) — exclus du montage final</dd>
     <dt>S</dt><dd>Scinder le segment (fenêtre dédiée)</dd>
     <dt>F</dt><dd>Fusionner les segments sélectionnés (plage)</dd>
     <dt>Alt+↑ / ↓</dt><dd>Locuteur précédent / suivant (changement de voix)</dd>

@@ -66,10 +66,10 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
   **conservés à l'export** ; le groupe indique « +N hors fichier ».
 
 ### Modifié
-- **Tagueur — « Couper » renommé « Effacer » (🧽)** pour le distinguer de
-  « Scinder » (marque le(s) segment(s) à retirer du montage). L'ancien « Effacer »
-  (qui retire l'affectation locuteur) devient « Désaffecter ». Touches inchangées
-  (C, 0).
+- **Tagueur — boutons renommés** (plus distincts) : « Couper » (exclure du
+  montage, touche **C**) devient **« Cacher » (🙈)** — ne se confond plus avec
+  « Scinder » ; l'action « retirer l'affectation de locuteur » (touche **0**) garde
+  le nom **« Effacer » (🧽)**.
 - **Tagueur — sélection multiple plus contrastée** : fond bleuté + liseré, bien
   plus visible qu'avant (6 % de blanc).
 - **Tagueur — 2ᵉ groupe de boutons = navigation** : le groupe « Prise de parole »
