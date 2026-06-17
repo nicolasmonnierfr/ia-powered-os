@@ -334,6 +334,7 @@
   let selected = -1;   // ancre de selection / segment courant
   let selAnchor = -1;  // debut de plage pour la selection multiple (Maj+fleche)
   let names = ["Locuteur 1", "Locuteur 2", "Locuteur 3", "Locuteur 4"];
+  let locuteursConnus = [];   // noms de personnes deja connus du client (pre-remplissage, mode serveur)
 
   const player = document.getElementById("player");
   const segList = document.getElementById("segList");
@@ -947,6 +948,7 @@
     lastPlaying = -1;
     render();
     if (selected >= 0) select(0, false);
+    renameSpeakers(true);   // nommage OBLIGATOIRE des le chargement (diarisation simple / sans reconciliation)
   }
 
   document.getElementById("srtFile").addEventListener("change", (e) => {
@@ -970,6 +972,7 @@
   async function serveurChargerEntretien() {
     try {
       const man = await (await fetch("/api/manifest")).json();
+      locuteursConnus = man.locuteurs_connus || [];   // pre-remplissage des noms (coherence inter-entretiens)
       // Audio
       if (man.audio) {
         const blob = await (await fetch("/api/audio")).blob();
@@ -1150,16 +1153,50 @@
     if (h) setDirStatus("Dossier memorise disponible — clique « Ouvrir le dossier » pour le recharger.", false);
   })();
 
-  // Renommage : un seul bouton qui demande tous les noms actifs
-  document.getElementById("renameBtns").textContent = "Renommer les locuteurs";
-  document.getElementById("renameBtns").addEventListener("click", () => {
-    for (let i = 0; i < nSpeakers; i++) {
-      const n = prompt(`Nom du Locuteur ${i + 1} :`, names[i]);
+  // ---- Nommage des locuteurs : OBLIGATOIRE (avant export) et PRE-REMPLI ----
+  // Les noms sont la 1re brique de cohérence inter-entretiens : un locuteur nommé
+  // « Béatrice Martin » remonte (via [Nom] dans le transcript -> detecter.py ->
+  // mémoire) et reçoit le même pseudo d'un entretien à l'autre. D'où :
+  //  - on suggère les noms déjà connus du client (locuteursConnus) ;
+  //  - on force le nommage juste après la réconciliation (avant la coupe) ;
+  //  - on bloque l'export tant qu'un locuteur UTILISÉ reste « Locuteur N ».
+  function usedSpeakers() {
+    const s = new Set();
+    segments.forEach(seg => { if (seg.speaker !== null && seg.speaker < nSpeakers) s.add(seg.speaker); });
+    return [...s].sort((a, b) => a - b);
+  }
+  function isDefaultName(i) {
+    const n = (names[i] || "").trim();
+    return !n || /^Locuteur\s*\d+$/i.test(n);
+  }
+  function namesComplete() { return usedSpeakers().every(i => !isDefaultName(i)); }
+
+  function renameSpeakers(onlyMissing) {
+    const cibles = usedSpeakers().filter(i => onlyMissing ? isDefaultName(i) : true);
+    if (cibles.length === 0) return;
+    const hint = locuteursConnus.length
+      ? `\n\nConnus pour ce client (réutilise le MÊME nom pour la cohérence) :\n  ${locuteursConnus.join("  ·  ")}`
+      : "";
+    for (const i of cibles) {
+      const def = isDefaultName(i) ? "" : names[i];
+      const n = prompt(`Nom du locuteur ${i + 1} — OBLIGATOIRE${hint}`, def);
       if (n && n.trim()) names[i] = n.trim();
     }
     buildControls();
     refreshClasses();
-  });
+  }
+
+  // Garde-fou d'export : refuse de produire un transcript avec « Locuteur N ».
+  function ensureNamed() {
+    if (namesComplete()) return true;
+    alert("Nomme d'abord TOUS les locuteurs (plus de « Locuteur N ») avant d'exporter.");
+    renameSpeakers(true);
+    if (!namesComplete()) { alert("Export annulé : locuteurs non nommés."); return false; }
+    return true;
+  }
+
+  document.getElementById("renameBtns").textContent = "Renommer les locuteurs";
+  document.getElementById("renameBtns").addEventListener("click", () => renameSpeakers(false));
 
   function download(filename, content) {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -1298,12 +1335,14 @@
   // --- Exports individuels (repli / usage ponctuel) ---
   document.getElementById("exportTxt").addEventListener("click", () => {
     if (segments.length === 0) return;
+    if (!ensureNamed()) return;
     const c = buildTxt();
     if (c === null) { alert("Tous les segments sont coupés : rien à exporter."); return; }
     download(`${stemFromAudio()}_coupe.txt`, c);
   });
   document.getElementById("exportSrt").addEventListener("click", () => {
     if (segments.length === 0) return;
+    if (!ensureNamed()) return;
     const c = buildSrt();
     if (c === null) { alert("Tous les segments sont coupés : rien à exporter."); return; }
     download(`${stemFromAudio()}_coupe.srt`, c);
@@ -1328,6 +1367,7 @@
 
   document.getElementById("exportAll").addEventListener("click", async () => {
     if (segments.length === 0) { alert("Charge d'abord une transcription."); return; }
+    if (!ensureNamed()) return;
     const txt = buildTxt();
     const srt = buildSrt();
     if (txt === null || srt === null) { alert("Tous les segments sont coupés : rien à exporter."); return; }
@@ -1483,6 +1523,7 @@
     }
     document.getElementById("reconcilePanel").classList.remove("open");
     refreshClasses();
+    renameSpeakers(true);   // nommage OBLIGATOIRE juste apres la reconciliation (avant la coupe)
   }
 
   document.getElementById("reconcileApply").addEventListener("click", () => applyReconcile());

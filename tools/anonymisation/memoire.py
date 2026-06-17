@@ -190,6 +190,24 @@ def index_variantes(mem: dict) -> dict:
     return idx
 
 
+def noms_personnes(mem: dict) -> list[str]:
+    """Noms canoniques des entrées de type PERSONNE (formes longues), dédupliqués.
+
+    Sert à PRÉ-REMPLIR le nommage des locuteurs dans le tagueur : en réutilisant
+    le nom exact d'un entretien à l'autre, la même personne reçoit le même pseudo
+    à l'anonymisation (cohérence inter-entretiens). 100% lecture.
+    """
+    vus, out = set(), []
+    for e in mem.get("entrees", []):
+        if e.get("type") != "PERSONNE":
+            continue
+        nom = e.get("canonique") or (e.get("variantes") or [None])[0]
+        if nom and nom.lower() not in vus:
+            vus.add(nom.lower())
+            out.append(nom)
+    return sorted(out, key=str.lower)
+
+
 def mapping_remplacement(mem: dict) -> list[tuple[str, str]]:
     """
     Liste (variante, pseudo) triée par longueur décroissante, pour l'aller

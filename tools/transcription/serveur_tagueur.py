@@ -83,6 +83,33 @@ def trouver_srt(root: Path):
     return None
 
 
+def trouver_memoire(depart: Path):
+    """Recherche ascendante du memoire_client.json (marqueur de perimetre)."""
+    cur = depart
+    while True:
+        cand = cur / "memoire_client.json"
+        if cand.is_file():
+            return cand
+        if cur.parent == cur:
+            return None
+        cur = cur.parent
+
+
+def noms_locuteurs_connus(root: Path):
+    """Noms de personnes deja connus du client (via memoire_client.json en
+    ascendant), pour pre-remplir le nommage des locuteurs -> meme personne =
+    meme nom = meme pseudo a l'anonymisation (coherence inter-entretiens)."""
+    mp = trouver_memoire(root)
+    if not mp:
+        return []
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "anonymisation"))
+        import memoire as M
+        return M.noms_personnes(M.charger_memoire(mp))
+    except Exception:
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Handler HTTP
 # ---------------------------------------------------------------------------
@@ -135,6 +162,7 @@ def make_handler(etat: Etat):
                 "audio": audio.name if audio else None,
                 "srt": (srt.name if srt else None),
                 "srt_dir": (str(srt.parent.relative_to(etat.root)) if srt else None),
+                "locuteurs_connus": noms_locuteurs_connus(etat.root),
             })
 
         def _audio(self):

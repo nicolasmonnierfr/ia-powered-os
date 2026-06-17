@@ -9,6 +9,27 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.4.0] — 2026-06-17
+
+### Ajouté — noms de locuteurs obligatoires + cohérence inter-entretiens (Phase 2)
+- **Nommage obligatoire** des locuteurs dans le tagueur, dès la 1re ouverture
+  (auto juste **après la réconciliation**, donc avant la phase de coupe ; aussi
+  à un chargement sans réconciliation). L'export (`.srt`/`.txt`/`2_coupe`) est
+  **bloqué** tant qu'un locuteur utilisé reste « Locuteur N ».
+- **Pré-remplissage / cohérence** : le tagueur **suggère les noms de personnes
+  déjà connus du client** (lus dans `memoire_client.json` par recherche
+  ascendante). En réutilisant le même nom, la même personne reçoit le **même
+  pseudonyme d'un entretien à l'autre** (le nom remonte via `[Nom]` →
+  `detecter.py` → mémoire). Règle le « regroupage différent à chaque entretien ».
+  - `memoire.py` : helper `noms_personnes()`.
+  - `serveur_tagueur.py` : `locuteurs_connus` dans `/api/manifest` (recherche
+    ascendante du `memoire_client.json`).
+  - `tagger.html` : nommage forcé + pré-rempli + garde-fou d'export.
+
+Outils : `memoire.py`, `serveur_tagueur.py`, `tagger.html`.
+
+---
+
 ## [1.3.0] — 2026-06-17
 
 ### Ajouté — réécoute audio + correction du texte pendant l'analyse (#6, #2, #16)
@@ -196,6 +217,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.4.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.4.0
 [1.3.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.3.0
 [1.2.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.2.0
 [1.1.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.1.0
