@@ -9,6 +9,31 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.2.0] — 2026-06-17
+
+### Ajouté / Modifié
+- **Scission identification / analyse** de l'étape d'anonymisation (la
+  pré-analyse automatique est désormais distincte de la validation humaine) :
+  - `ia identifier` — **pré-analyse AUTOMATIQUE** : détection NER (`detecter.py`)
+    → candidats dans `3_anonymisation/<x>.etat.json`. N'ouvre **plus** l'éditeur.
+  - `ia analyser` — **validation HUMAINE seule** : éditeur d'alias sur les
+    candidats déjà identifiés ; exige le `.etat.json` (sinon renvoie vers
+    `ia identifier`). À l'export, `validation.faite=true` débloque l'anonymisation.
+
+  Auparavant `ia analyser` enchaînait détection **et** éditeur d'un seul bloc.
+- **Orchestrateur** : l'identification est exécutée automatiquement parmi les
+  étapes rapides, **avant** la transcription (quick win) → les candidats sont
+  prêts quand tu passes à la validation.
+- **`etat.py`** : nouvelle action `identifier` (auto) distincte d'`analyser`
+  (humain). Colonne *Analyse* : `--` à identifier (auto) · `~~` identifié, à
+  valider (toi) · `OK` validé.
+
+Outils touchés : `anonymisation.ps1`, `ia.ps1`, `orchestrer.ps1`, `etat.py`.
+
+> Optimisation de cette étape (points durs) : à traiter ensuite.
+
+---
+
 ## [1.1.0] — 2026-06-17
 
 ### Ajouté
@@ -146,5 +171,6 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.2.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.2.0
 [1.1.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.0.0

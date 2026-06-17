@@ -43,6 +43,7 @@ ACTIONS = {
     "transcrire":  {"auto": True,  "qui": "auto", "label": "Transcrire"},
     "taguer":      {"auto": False, "qui": "toi",  "label": "Taguer (locuteurs + coupe)"},
     "couper":      {"auto": True,  "qui": "auto", "label": "Couper l'audio"},
+    "identifier":  {"auto": True,  "qui": "auto", "label": "Identifier (detection NER)"},
     "analyser":    {"auto": False, "qui": "toi",  "label": "Analyser (valider les entites)"},
     "anonymiser":  {"auto": True,  "qui": "auto", "label": "Anonymiser"},
     "anonymiser_bloque": {"auto": False, "qui": "toi", "label": "Anonymiser (memoire manquante)"},
@@ -242,10 +243,12 @@ def etat_entretien(d: Path):
     elif coupe != "fait":
         action = "couper"
         note = "echec precedent — relancable" if coupe == "echec" else "plan present, audio a reconstruire"
-    elif analyse != "valide":
+    elif analyse == "a_faire":
+        action = "identifier"
+        note = "detection NER automatique (rapide)"
+    elif analyse == "detecte":
         action = "analyser"
-        note = "detection faite, validation a confirmer" if analyse == "detecte" \
-               else "valider les entites puis exporter la memoire"
+        note = "candidats detectes — valider les entites puis exporter la memoire"
     elif anonymisation != "fait":
         if memoire is not None:
             action = "anonymiser"

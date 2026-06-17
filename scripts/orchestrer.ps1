@@ -3,6 +3,7 @@
 #
 # Affiche le tableau d'avancement de tous les entretiens d'un PERIMETRE, puis
 # realise automatiquement ce qui est automatisable :
+#   - identifier  (transcript pret, candidats NER non encore detectes)  [rapide]
 #   - couper      (plan_de_coupe.json present, audio coupe manquant)   [rapide]
 #   - anonymiser  (analyse VALIDEE + memoire presente, sortie manquante)[rapide]
 #   - transcrire  (audio sans transcription)        [LONG -> arriere-plan serialise]
@@ -128,15 +129,24 @@ function Invoke-EtapeAuto {
     finally { Pop-Location }
 }
 
-# --- 4) Etapes RAPIDES : couper puis anonymiser ------------------------------
+# --- 4) Etapes RAPIDES : identifier, couper, anonymiser ----------------------
+# Toutes rapides -> faites AVANT la transcription (longue) du meme tick. En
+# particulier l'IDENTIFICATION (detection NER) est un quick win : on la lance
+# automatiquement pour que les candidats soient prets quand tu passes a la
+# validation humaine ('ia analyser').
+$aIdentifier = @($etat.entretiens | Where-Object { $_.action -eq "identifier" })
 $aCouper = @($etat.entretiens | Where-Object { $_.action -eq "couper" })
 $aAnon   = @($etat.entretiens | Where-Object { $_.action -eq "anonymiser" })
 
 if ($DryRun) {
     Write-Avert "DryRun : aucune execution. Seraient lances :"
-    foreach ($e in $aCouper) { Write-Info "  couper     -> $($e.dossier)" }
-    foreach ($e in $aAnon)   { Write-Info "  anonymiser -> $($e.dossier)" }
+    foreach ($e in $aIdentifier) { Write-Info "  identifier -> $($e.dossier)" }
+    foreach ($e in $aCouper)     { Write-Info "  couper     -> $($e.dossier)" }
+    foreach ($e in $aAnon)       { Write-Info "  anonymiser -> $($e.dossier)" }
 } else {
+    foreach ($e in $aIdentifier) {
+        Invoke-EtapeAuto -Chemin $e.chemin -Libelle "identifier" -Action { & $wAnon identifier }
+    }
     foreach ($e in $aCouper) {
         Invoke-EtapeAuto -Chemin $e.chemin -Libelle "couper" -Action { & $wCouper }
     }

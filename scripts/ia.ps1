@@ -8,7 +8,8 @@
 #   ia transcrire [audio] [-NoDiarize] [-ChunkMin n] ...
 #   ia taguer [-Port n] [-NoBrowser]
 #   ia couper [plan] [-Audio f]
-#   ia analyser          # detection NER + editeur (ecrit memoire_client.json)
+#   ia identifier        # pre-analyse AUTO : detection NER -> candidats .etat.json
+#   ia analyser          # validation HUMAINE (editeur) -> memoire_client.json
 #   ia anonymiser        # applique le remplacement -> transcript anonymise
 #   ia repersonnaliser [-Rapport f] [-Court]   # reinjecte les vrais noms (#12)
 #   ia etat              # affiche l'avancement de l'entretien courant
@@ -41,7 +42,8 @@ function Show-Aide {
     Write-Host "  ia transcrire [audio]            " -NoNewline -ForegroundColor Green; Write-Host "Transcrit -> 1_transcription\"
     Write-Host "  ia taguer                        " -NoNewline -ForegroundColor Green; Write-Host "Ouvre le tagueur (audio+srt charges) -> 2_coupe\"
     Write-Host "  ia couper [plan]                 " -NoNewline -ForegroundColor Green; Write-Host "Reconstruit l'audio coupe -> 2_coupe\"
-    Write-Host "  ia analyser                      " -NoNewline -ForegroundColor Green; Write-Host "Detection NER + editeur -> memoire_client.json"
+    Write-Host "  ia identifier                    " -NoNewline -ForegroundColor Green; Write-Host "Pre-analyse AUTO : detection NER -> candidats"
+    Write-Host "  ia analyser                      " -NoNewline -ForegroundColor Green; Write-Host "Validation HUMAINE (editeur) -> memoire_client.json"
     Write-Host "  ia anonymiser                    " -NoNewline -ForegroundColor Green; Write-Host "Applique le remplacement -> 3_anonymisation\"
     Write-Host "  ia repersonnaliser [-Rapport f]  " -NoNewline -ForegroundColor Green; Write-Host "Reinjecte les vrais noms dans un rapport (#12)"
     Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement de l'entretien courant (entretien.json)"
@@ -118,7 +120,8 @@ $map = @{
 # Commandes d'anonymisation : toutes servies par anonymisation.ps1, avec une ETAPE
 # interne injectee en premier argument positionnel. (option A : un seul wrapper)
 $mapAnon = @{
-    "analyser"        = "detecter"
+    "identifier"      = "identifier"
+    "analyser"        = "analyser"
     "anonymiser"      = "appliquer"
     "repersonnaliser" = "repersonnaliser"
 }

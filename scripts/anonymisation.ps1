@@ -3,12 +3,14 @@
 #
 # A lancer DEPUIS le repertoire racine de l'entretien.
 #
-#   ia analyser          # 1) detection NER -> ouvre l'editeur (tu valides ;
-#                        #    memoire_client.json ecrite au niveau du perimetre)
-#   ia anonymiser        # 2) applique -> transcript anonymise dans 3_anonymisation\
-#   ia repersonnaliser   # 3) (apres l'IA externe) reinjecte les vrais noms (#12)
+#   ia identifier        # 1) detection NER (AUTO, rapide) -> candidats .etat.json
+#   ia analyser          # 2) validation HUMAINE via l'editeur -> memoire_client.json
+#   ia anonymiser        # 3) applique -> transcript anonymise dans 3_anonymisation\
+#   ia repersonnaliser   # 4) (apres l'IA externe) reinjecte les vrais noms (#12)
 #
-# Etapes internes (ce wrapper) : detecter / appliquer / repersonnaliser.
+# Etapes internes (ce wrapper) : identifier / analyser / appliquer / repersonnaliser.
+# L'identification (detection) est dissociee de l'analyse (validation humaine) :
+# la 1re est automatisable (lancee par l'orchestrateur), la 2de requiert l'humain.
 #
 # Le perimetre (memoire_client.json) est trouve par recherche ASCENDANTE
 # depuis l'entretien. Au tout premier entretien d'un perimetre, une
@@ -27,7 +29,7 @@
 
 [CmdletBinding()]
 param(
-    [Parameter(Position = 0)] [ValidateSet("detecter", "appliquer", "repersonnaliser")] [string]$Commande,
+    [Parameter(Position = 0)] [ValidateSet("identifier", "analyser", "appliquer", "repersonnaliser")] [string]$Commande,
     [string]$Transcript,
     [string]$Rapport,
     [switch]$Court,
@@ -38,8 +40,8 @@ param(
 . "$PSScriptRoot\_commun.ps1"
 
 if (-not $Commande) {
-    Write-Echec "Precise la commande : 'detecter', 'appliquer' ou 'repersonnaliser'."
-    Write-Info  "  ia analyser    puis    ia anonymiser    puis    ia repersonnaliser"
+    Write-Echec "Precise la commande : 'identifier', 'analyser', 'appliquer' ou 'repersonnaliser'."
+    Write-Info  "  ia identifier  puis  ia analyser  puis  ia anonymiser  puis  ia repersonnaliser"
     exit 1
 }
 
@@ -82,32 +84,30 @@ if ($perim.MemoireExiste) {
 $anonDir = Get-SousDossier "3_anonymisation" -Creer
 
 # =============================================================================
-# COMMANDE : detecter
+# COMMANDE : identifier  (PRE-ANALYSE AUTO : detection NER, sans editeur)
 # =============================================================================
-if ($Commande -eq "detecter") {
+# Etape AUTOMATISABLE (lancee par l'orchestrateur) : produit les candidats a
+# l'anonymisation dans <BaseName>.etat.json. N'ouvre PAS l'editeur (la validation
+# humaine est l'etape 'analyser', distincte). Idempotente : relancable.
+if ($Commande -eq "identifier") {
     $detecter = Get-Tool -RepoHome $repo "tools\anonymisation\detecter.py"
-    $serveur  = Get-Tool -RepoHome $repo "tools\anonymisation\serveur_editeur.py"
-    $editeur  = Get-Tool -RepoHome $repo "tools\anonymisation\editeur_alias.html"
+    $etatOut  = Join-Path $anonDir "$($srcItem.BaseName).etat.json"
 
-    $etatOut = Join-Path $anonDir "$($srcItem.BaseName).etat.json"
-
-    Write-Etape "Analyse : detection des entites (NER local)"
+    Write-Etape "Identification : detection des entites (NER local)"
     $pyArgs = @($detecter, $src, "--out", $etatOut)
     if ($perim.MemoireExiste) { $pyArgs += @("--memoire", $perim.MemoirePath) }
     $ignGlobal = Join-Path $repo "config\ignorer_global.json"
     if (Test-Path -LiteralPath $ignGlobal) { $pyArgs += @("--ignorer-global", $ignGlobal) }
 
-    # 'detecter' est une SOUS-ETAPE de l'anonymisation : on trace la detection
-    # (sous_etape = detecter) mais on NE finalise PAS le statut a 'fait' ici.
-    # L'anonymisation n'est reellement terminee qu'apres 'appliquer'. A l'image
-    # de taguer.ps1, on laisse le statut en 'en_cours' a la sortie (la validation
-    # humaine + l'application restent a faire).
-    $ctx = Start-Etape -Etape "anonymisation" -Details @{ sous_etape = "detecter"; transcript = $srcItem.Name }
+    # Sous-etape de l'anonymisation : on trace la detection mais on NE finalise
+    # PAS le statut a 'fait' (l'anonymisation se termine a 'appliquer'). On laisse
+    # 'en_cours' : candidats detectes, validation humaine ('analyser') a suivre.
+    $ctx = Start-Etape -Etape "anonymisation" -Details @{ sous_etape = "identifier"; transcript = $srcItem.Name }
     Write-Info "Log detaille : $($ctx.LogFile)"
     $code = Invoke-Logge -Contexte $ctx -Exe $python -Arguments $pyArgs
     if ($code -ne 0) {
         Complete-Etape -Contexte $ctx -Statut "echec" -Message "detecter.py a renvoye le code $code"
-        Write-Echec "La detection a echoue (code $code). Voir le log : $($ctx.LogFile)"
+        Write-Echec "L'identification a echoue (code $code). Voir le log : $($ctx.LogFile)"
         exit $code
     }
     if (-not (Test-Path -LiteralPath $etatOut)) {
@@ -115,28 +115,51 @@ if ($Commande -eq "detecter") {
         Write-Echec "Etat de detection non produit. Voir le log : $($ctx.LogFile)"
         exit 1
     }
-    Write-Ok "Etat de detection : 3_anonymisation\$($srcItem.BaseName).etat.json"
+    # Statut explicitement 'en_cours' (detection faite, validation a venir).
+    $projet = Read-Projet
+    $projet.etapes.anonymisation.statut = "en_cours"
+    Write-Projet $projet
+    Add-Content -LiteralPath $ctx.LogFile -Value "`r`n--- Identification terminee (candidats detectes) ---" -Encoding UTF8
+
+    Write-Ok "Candidats identifies : 3_anonymisation\$($srcItem.BaseName).etat.json"
+    Write-Info "Etape suivante (humaine) : ia analyser"
+    exit 0
+}
+
+# =============================================================================
+# COMMANDE : analyser  (VALIDATION HUMAINE : editeur d'alias, sans re-detecter)
+# =============================================================================
+# Ouvre l'editeur sur les candidats deja identifies. Necessite que 'identifier'
+# ait tourne (presence du .etat.json). A l'export, serveur_editeur.py estampille
+# validation.faite=true -> debloque l'anonymisation auto.
+if ($Commande -eq "analyser") {
+    $serveur = Get-Tool -RepoHome $repo "tools\anonymisation\serveur_editeur.py"
+    $editeur = Get-Tool -RepoHome $repo "tools\anonymisation\editeur_alias.html"
+    $etatOut = Join-Path $anonDir "$($srcItem.BaseName).etat.json"
+
+    if (-not (Test-Path -LiteralPath $etatOut)) {
+        Write-Echec "Aucun etat de detection : 3_anonymisation\$($srcItem.BaseName).etat.json"
+        Write-Info  "Lance d'abord l'identification : ia identifier"
+        exit 1
+    }
 
     Write-Etape "Validation humaine — ouverture de l'editeur d'alias"
     Write-Info "Valide les entites, puis clique « Exporter la memoire »."
     Write-Info "La memoire sera ecrite ici : $($perim.MemoirePath)"
     Write-Info "Ferme l'onglet quand tu as termine (le serveur s'arrete seul)."
 
-    # La detection a reussi mais l'anonymisation reste a faire : on remet
-    # explicitement le statut en 'en_cours' (le statut ne ment pas sur
-    # l'avancement reel). Le log de detection est conserve dans entretien.json.
-    $projet = Read-Projet
-    $projet.etapes.anonymisation.statut = "en_cours"
-    Write-Projet $projet
+    # Session interactive tracee sous l'anonymisation ; statut reste 'en_cours'
+    # (le signal de validation est validation.faite dans le .etat.json, pose par
+    # le serveur a l'export reussi de la memoire).
+    $ctx = Start-Etape -Etape "anonymisation" -Details @{ sous_etape = "analyser"; transcript = $srcItem.Name }
+    Write-Info "Log detaille : $($ctx.LogFile)"
 
     $srvArgs = @($serveur, "--etat", $etatOut, "--memoire", $perim.MemoirePath, "--editeur", $editeur, "--port", $Port)
     if ($NoBrowser) { $srvArgs += "--no-browser" }
-    # Session serveur interactive : on la trace dans le meme log, sans en faire
-    # une etape distincte (le statut reste 'en_cours').
     & $python @srvArgs 2>&1 | Tee-Object -FilePath $ctx.LogFile -Append | Out-Host
     Add-Content -LiteralPath $ctx.LogFile -Value "`r`n--- Session editeur d'alias terminee (serveur arrete) ---" -Encoding UTF8
 
-    Write-Ok "Detection + validation terminees."
+    Write-Ok "Validation terminee."
     Write-Info "Etape suivante : ia anonymiser"
     exit 0
 }
