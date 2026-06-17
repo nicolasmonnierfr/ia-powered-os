@@ -39,8 +39,14 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
   sur-segmentation ou une scission erronée.
 - **Tagueur — bouton ▶ par segment** : lit à partir de ce segment (entre le temps
   et le texte).
+- **Éditeur d'alias — nouveaux labels distingués** : un label détecté dans CE
+  fichier mais pas encore dans la mémoire client est affiché sur **fond vert**
+  (≠ labels déjà connus de la mémoire). Aide à repérer ce qui reste à traiter.
 
 ### Modifié
+- **Éditeur d'alias — « Fusionner vers… » cliquable** : remplace le `prompt()`
+  numéroté par une **liste cliquable** des groupes cibles (pseudo + type +
+  variantes) ; un clic fusionne.
 - **Panneau « Scinder » refondu** : lecture/pause de l'extrait, **curseur ▲
   positionnable** sous la timeline (glisser), bouton « ⟐ Couper au point lu »
   (place la coupe au point d'écoute + met en pause), et « ▶ Avant la coupe » /

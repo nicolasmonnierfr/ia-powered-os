@@ -77,6 +77,22 @@
   .variant .ex mark { background: var(--t-email); color: #14161a; padding: 0 2px;
     border-radius: 3px; font-style: normal; font-weight: 600; }
   .variant .homo-warn { color: var(--danger); cursor: help; font-weight: 700; }
+  /* Label DÉTECTÉ dans ce fichier, pas encore dans la mémoire client (à traiter). */
+  .variant.is-new { background: rgba(94,196,136,0.12); border-color: rgba(94,196,136,0.40); }
+  /* Sélecteur de fusion cliquable */
+  .merge-ov { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 50;
+    display: flex; align-items: center; justify-content: center; }
+  .merge-box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px; width: min(540px, 92vw); max-height: 80vh; overflow: auto;
+    display: flex; flex-direction: column; gap: 6px; box-shadow: 0 12px 48px rgba(0,0,0,.55); }
+  .merge-title { font-weight: 600; margin-bottom: 4px; }
+  .merge-item { display: flex; align-items: center; gap: 10px; text-align: left;
+    background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; cursor: pointer; font: inherit; }
+  .merge-item:hover { border-color: var(--accent-edge); background: var(--panel-2); }
+  .merge-item b { white-space: nowrap; }
+  .merge-vars { color: var(--ink-dim); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
   .src { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-dim); }
   .var-actions { display: flex; gap: 5px; margin-left: auto; }
   .var-actions .btn { padding: 3px 8px; font-size: 11px; }
@@ -102,7 +118,7 @@
 </header>
 
 <div class="toolbar">
-  <span>Regrouper : <b style="color:var(--ink)">glisse</b> une variante sur un autre groupe (ou « Fusionner vers… »). Chaque groupe = un pseudonyme.</span>
+  <span>Regrouper : <b style="color:var(--ink)">glisse</b> une variante sur un autre groupe, ou « Fusionner vers… » (liste cliquable). Chaque groupe = un pseudonyme. <b style="color:var(--accent)">Fond vert</b> = nouveau label détecté dans ce fichier (pas encore dans la mémoire client).</span>
 </div>
 
 <div class="wrap" id="wrap">
@@ -219,7 +235,7 @@
       byPseudo[key].variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
-        positions: c.positions || [], homonymes: c.homonymes || []
+        positions: c.positions || [], homonymes: c.homonymes || [], nouveau: true
       });
     }
     groups = Object.values(byPseudo);
@@ -247,7 +263,7 @@
         id: nextId(), pseudo: e.pseudo, type: e.type || typeFromPseudo(e.pseudo),
         variants: (e.variantes || []).map(t => ({
           texte: t, occurrences: 0, score: 1, source: e.source || "alias", exemple: "",
-          positions: [], homonymes: []
+          positions: [], homonymes: [], nouveau: false   // vient de la memoire client existante
         }))
       });
     }
@@ -280,7 +296,7 @@
       g.variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
-        positions: c.positions || [], homonymes: c.homonymes || []
+        positions: c.positions || [], homonymes: c.homonymes || [], nouveau: true
       });
       connues.add(low);
     }
@@ -378,7 +394,8 @@
 
   function renderVariant(group, v) {
     const el = document.createElement("div");
-    el.className = "variant"; el.draggable = true;
+    // .is-new : label détecté dans CE fichier, pas encore dans la mémoire client.
+    el.className = "variant" + (v.nouveau ? " is-new" : ""); el.draggable = true;
     el.dataset.text = v.texte; el.dataset.group = group.id;
 
     const grip = document.createElement("span"); grip.className = "grip"; grip.textContent = "⠿";
@@ -431,7 +448,7 @@
     }
     const moveBtn = document.createElement("button");
     moveBtn.className = "btn ghost"; moveBtn.textContent = "Fusionner vers…";
-    moveBtn.addEventListener("click", () => promptMerge(group, v));
+    moveBtn.addEventListener("click", () => openMergePicker(group, v));
     const igBtn = document.createElement("button");
     igBtn.className = "btn ghost"; igBtn.textContent = "Ignorer";
     igBtn.addEventListener("click", () => {
@@ -480,7 +497,7 @@
       back.addEventListener("click", () => {
         ignored = ignored.filter(x => x !== it);
         groups.push({ id: nextId(), pseudo: "PERSONNE_?", type: "PERSONNE",
-          variants: [{ texte: it.texte, occurrences: 0, score: 0, source: "manuel", exemple: "" }] });
+          variants: [{ texte: it.texte, occurrences: 0, score: 0, source: "manuel", exemple: "", positions: [], homonymes: [], nouveau: true }] });
         render();
       });
       va.appendChild(back);
@@ -532,14 +549,45 @@
     render();
   }
 
-  function promptMerge(srcGroup, v) {
+  function escapeHtml(s) {
+    return (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // Sélecteur de fusion CLIQUABLE (remplace l'ancien prompt numéroté) : liste les
+  // autres groupes ; un clic fusionne la variante dans le groupe choisi.
+  function openMergePicker(srcGroup, v) {
     const others = groups.filter(g => g !== srcGroup);
     if (others.length === 0) { alert("Aucun autre groupe où fusionner."); return; }
-    const list = others.map((g, i) => `${i + 1}. ${g.pseudo} (${g.type}) — ${g.variants.map(x => x.texte).join(", ")}`).join("\n");
-    const ans = prompt(`Fusionner « ${v.texte} » vers quel groupe ?\n\n${list}\n\nNuméro :`);
-    const n = parseInt(ans, 10);
-    if (!n || n < 1 || n > others.length) return;
-    moveVariant(JSON.stringify({ group: srcGroup.id, texte: v.texte }), others[n - 1]);
+    const ov = document.createElement("div");
+    ov.className = "merge-ov";
+    const box = document.createElement("div");
+    box.className = "merge-box";
+    const h = document.createElement("div");
+    h.className = "merge-title";
+    h.textContent = `Fusionner « ${v.texte} » vers :`;
+    box.appendChild(h);
+    others.forEach(g => {
+      const b = document.createElement("button");
+      b.className = "merge-item";
+      b.innerHTML = `<span class="type-badge type-${g.type}">${g.type}</span>`
+        + `<b>${escapeHtml(g.pseudo)}</b>`
+        + `<span class="merge-vars">${escapeHtml(g.variants.map(x => x.texte).join(", "))}</span>`;
+      b.addEventListener("click", () => {
+        moveVariant(JSON.stringify({ group: srcGroup.id, texte: v.texte }), g);
+        ov.remove();
+      });
+      box.appendChild(b);
+    });
+    const cancel = document.createElement("button");
+    cancel.className = "btn ghost"; cancel.style.marginTop = "6px"; cancel.textContent = "Annuler";
+    cancel.addEventListener("click", () => ov.remove());
+    box.appendChild(cancel);
+    ov.appendChild(box);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    document.addEventListener("keydown", function esc(e) {
+      if (e.key === "Escape") { ov.remove(); document.removeEventListener("keydown", esc); }
+    });
+    document.body.appendChild(ov);
   }
 
   document.getElementById("addGenerique").addEventListener("click", () => {
@@ -554,7 +602,7 @@
     const t = prompt("Texte exact de l'entité à anonymiser (ex. un nom que la détection a raté) :");
     if (!t || !t.trim()) return;
     groups.push({ id: nextId(), pseudo: "PERSONNE_?", type: "PERSONNE",
-      variants: [{ texte: t.trim(), occurrences: 0, score: 0, source: "manuel", exemple: "" }] });
+      variants: [{ texte: t.trim(), occurrences: 0, score: 0, source: "manuel", exemple: "", positions: [], homonymes: [], nouveau: true }] });
     render();
   });
 
