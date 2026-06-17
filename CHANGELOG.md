@@ -9,6 +9,23 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.5.0] — 2026-06-17
+
+### Ajouté — tagueur : scinder un segment + saut au changement de locuteur
+- **#1 — Scinder un segment** (diarisation ayant fusionné deux voix) via une
+  **fenêtre dédiée** : mini-timeline zoomée sur [segment précédent · segment ·
+  suivant] pour écouter précisément (▶ Contexte / ▶ Segment) ; **clic** = point
+  de coupe **audio**, **curseur dans le texte** = point de coupe **texte** →
+  2 segments. La ré-affectation des locuteurs se fait ensuite dans la vue
+  globale. Bouton « Scinder » + touche **S**.
+- **#3 — Saut au changement de locuteur** : depuis le segment courant, saute le
+  « run » du même locuteur et se pose sur la prochaine/précédente prise de parole
+  d'un autre locuteur. Boutons « Locuteur ⏭ / ⏮ » + **Alt+↓ / Alt+↑**.
+
+Outils : `tagger.html`.
+
+---
+
 ## [1.4.0] — 2026-06-17
 
 ### Ajouté — noms de locuteurs obligatoires + cohérence inter-entretiens (Phase 2)
@@ -217,6 +234,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.5.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.0
 [1.4.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.4.0
 [1.3.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.3.0
 [1.2.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.2.0
