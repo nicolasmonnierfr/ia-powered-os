@@ -1418,7 +1418,7 @@
   }
 
   document.getElementById("renameBtns").textContent = "Renommer les locuteurs";
-  document.getElementById("renameBtns").addEventListener("click", () => renameSpeakers(false));
+  document.getElementById("renameBtns").addEventListener("click", () => nameAllSpeakers(false));
 
   function download(filename, content) {
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });

@@ -13,6 +13,11 @@ parenthèses) et retiré du backlog.
 
 Retours de test (tagueur). À consolider en version taguée une fois la salve finie.
 
+### Corrigé
+- **Bouton « Renommer les locuteurs »** : ne faisait plus rien tant qu'aucun
+  locuteur n'était assigné (régression Phase 2 — il ne traitait que les locuteurs
+  déjà *utilisés*). Il renomme de nouveau **tous** les locuteurs (`nameAllSpeakers`).
+
 ### Modifié
 - **Nommage des locuteurs en TOUTE PREMIÈRE étape** à l'ouverture du tagueur :
   on nomme « Locuteur 1 / 2 » (noms réels, suggérés) **avant** la réconciliation,

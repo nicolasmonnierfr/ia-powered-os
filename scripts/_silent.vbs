@@ -21,5 +21,10 @@ For i = 0 To WScript.Arguments.Count - 1
   If i > 0 Then cmd = cmd & " "
   cmd = cmd & a
 Next
-' 0 = fenetre masquee ; False = ne pas attendre la fin.
-sh.Run cmd, 0, False
+' 0 = fenetre masquee ; True = ATTENDRE la fin du process.
+' On attend volontairement : ainsi l'instance de tache reste vivante tant que la
+' commande tourne. Indispensable si la commande est longue et SYNCHRONE (ex.
+' transcription inline) -> sans attente, le Planificateur considererait la tache
+' finie et tuerait le process detache. Pour une tache breve (etat) : ~1 s, sans
+' impact.
+sh.Run cmd, 0, True
