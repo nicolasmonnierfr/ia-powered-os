@@ -74,6 +74,9 @@
   .variant .meta { font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
   .variant .ex { font-size: 12px; color: var(--ink-dim); font-style: italic; flex: 1 1 auto;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .variant .ex mark { background: var(--t-email); color: #14161a; padding: 0 2px;
+    border-radius: 3px; font-style: normal; font-weight: 600; }
+  .variant .homo-warn { color: var(--danger); cursor: help; font-weight: 700; }
   .src { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-dim); }
   .var-actions { display: flex; gap: 5px; margin-left: auto; }
   .var-actions .btn { padding: 3px 8px; font-size: 11px; }
@@ -170,6 +173,26 @@
 
   function nextId() { return "g" + (uid++); }
 
+  // #11 : insère l'extrait dans `el` en SURLIGNANT (<mark>) toutes les
+  // occurrences de `term` (insensible à la casse). Construit avec des noeuds DOM
+  // (pas d'innerHTML) pour rester sûr face au texte arbitraire du transcript.
+  function setExcerpt(el, excerpt, term) {
+    el.textContent = "";
+    const text = excerpt || "";
+    const t = (term || "").trim();
+    if (!t) { el.textContent = text; return; }
+    const low = text.toLowerCase(), tl = t.toLowerCase();
+    let i = 0, idx;
+    while ((idx = low.indexOf(tl, i)) !== -1) {
+      if (idx > i) el.appendChild(document.createTextNode(text.slice(i, idx)));
+      const m = document.createElement("mark");
+      m.textContent = text.slice(idx, idx + t.length);
+      el.appendChild(m);
+      i = idx + t.length;
+    }
+    if (i < text.length) el.appendChild(document.createTextNode(text.slice(i)));
+  }
+
   // ---- Chargement de l'état de détection ----
   document.getElementById("stateFile").addEventListener("change", (e) => {
     const f = e.target.files[0]; if (!f) return;
@@ -196,7 +219,7 @@
       byPseudo[key].variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
-        positions: c.positions || []
+        positions: c.positions || [], homonymes: c.homonymes || []
       });
     }
     groups = Object.values(byPseudo);
@@ -224,7 +247,7 @@
         id: nextId(), pseudo: e.pseudo, type: e.type || typeFromPseudo(e.pseudo),
         variants: (e.variantes || []).map(t => ({
           texte: t, occurrences: 0, score: 1, source: e.source || "alias", exemple: "",
-          positions: []
+          positions: [], homonymes: []
         }))
       });
     }
@@ -257,7 +280,7 @@
       g.variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
-        positions: c.positions || []
+        positions: c.positions || [], homonymes: c.homonymes || []
       });
       connues.add(low);
     }
@@ -363,7 +386,7 @@
     const src = document.createElement("span"); src.className = "src"; src.textContent = v.source;
     const meta = document.createElement("span"); meta.className = "meta";
     meta.textContent = (v.occurrences ? v.occurrences + "×" : "") + (v.score ? ` · ${v.score.toFixed(2)}` : "");
-    const ex = document.createElement("span"); ex.className = "ex"; ex.textContent = v.exemple || "";
+    const ex = document.createElement("span"); ex.className = "ex"; setExcerpt(ex, v.exemple, v.texte);
 
     const va = document.createElement("div"); va.className = "var-actions";
     // ▶ Réécoute : présent si l'audio est dispo ET que la variante a des timecodes.
@@ -419,7 +442,17 @@
     });
     va.append(moveBtn, igBtn);
 
-    el.append(grip, txt, src, meta, ex, va);
+    let warn = null;
+    if (v.homonymes && v.homonymes.length) {
+      warn = document.createElement("span");
+      warn.className = "homo-warn"; warn.textContent = "⚠";
+      warn.title = "Homonymie possible (nom identique ou proche) avec :\n• "
+        + v.homonymes.join("\n• ")
+        + "\n\nVérifie : même personne (à regrouper) ou personnes différentes (à garder séparées) ?";
+    }
+    el.append(grip, txt);
+    if (warn) el.append(warn);
+    el.append(src, meta, ex, va);
 
     el.addEventListener("dragstart", (ev) => {
       el.classList.add("dragging");
@@ -527,10 +560,12 @@
 
   function updateStats() {
     const nVar = groups.reduce((a, g) => a + g.variants.length, 0);
+    const nHomo = groups.reduce((a, g) => a + g.variants.filter(v => v.homonymes && v.homonymes.length).length, 0);
     statsEl.innerHTML =
       `<span class="stat">Groupes <b>${groups.length}</b></span>
        <span class="stat">Variantes <b>${nVar}</b></span>
-       <span class="stat">Ignorés <b>${ignored.length}</b></span>`;
+       <span class="stat">Ignorés <b>${ignored.length}</b></span>`
+      + (nHomo ? `<span class="stat" style="color:var(--danger)">⚠ Homonymes <b>${nHomo}</b></span>` : "");
     exportBtn.disabled = (groups.length === 0 && ignored.length === 0 && generiques.length === 0);
     document.getElementById("footHint").textContent = transcriptName ? `Transcript : ${transcriptName}` : "";
   }

@@ -9,6 +9,23 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.6.0] — 2026-06-17
+
+### Ajouté — éditeur d'alias : surlignage + alerte homonymes
+- **#11 — Surlignage du terme** : dans l'éditeur, le terme en cours de
+  catégorisation est mis en évidence (`<mark>`) dans l'extrait de contexte
+  (toutes occurrences, insensible à la casse). Côté éditeur uniquement.
+- **#9 — Alerte homonymes** : `detecter.py` compare les candidats PERSONNE entre
+  eux et signale les risques de confusion — **token partagé** (« Marc Durand » /
+  « Marc Dupont » / « Marc ») ou **nom proche** (Levenshtein token à token :
+  « Dupont » / « Dupond »). Chaque candidat concerné porte `homonymes` dans le
+  `.etat.json` ; l'éditeur affiche un **⚠** (liste au survol) + un compteur dans
+  les stats. L'outil n'arbitre pas : alerte à lever à la main.
+
+Outils : `detecter.py`, `editeur_alias.html`.
+
+---
+
 ## [1.5.1] — 2026-06-17
 
 ### Corrigé
@@ -246,6 +263,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.6.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.0
 [1.5.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.1
 [1.5.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.5.0
 [1.4.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.4.0

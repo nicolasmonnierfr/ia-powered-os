@@ -250,6 +250,7 @@ def main():
                     found[v]["exemples"].append(ctx)
 
     candidats = assign_pseudos(list(found.values()), forced_map, existing, mem)
+    n_homo = detecter_homonymes(candidats)
 
     etat = {
         "transcript": tpath.name,
@@ -267,6 +268,9 @@ def main():
     for c in sorted(candidats, key=lambda x: (x["type"], -x["occurrences"])):
         print(f"  {c['pseudo_propose']:14} <- {c['texte']!r:30} "
               f"[{c['type']}, {c['occurrences']}x, {c['source']}, score {c['score']:.2f}]")
+    if n_homo:
+        print(f"\n[ALERTE] {n_homo} entité(s) PERSONNE en risque d'homonymie "
+              f"(noms proches/partagés) — à lever dans l'éditeur.")
     print(f"\nÉtat intermédiaire écrit : {out}")
     print("Étape suivante : valider dans l'éditeur HTML, puis appliquer.")
 
@@ -299,6 +303,63 @@ def assign_pseudos(cands, forced_map, existing, mem):
         else:
             c["pseudo_propose"] = M.prochain_pseudo(c["type"], counters)
     return cands
+
+
+# ---------------------------------------------------------------------------
+# 4. Alerte homonymes (#9) — comparaison des candidats PERSONNE entre eux
+# ---------------------------------------------------------------------------
+def _leven(a: str, b: str) -> int:
+    """Distance de Levenshtein (sans dépendance externe)."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _tokens(s: str) -> set:
+    """Mots significatifs (>= 3 lettres), en minuscules — pour repérer un
+    prénom/nom partagé."""
+    return {w for w in re.findall(r"\w{3,}", s.lower())}
+
+
+def detecter_homonymes(candidats: list) -> int:
+    """Marque les candidats PERSONNE pouvant être confondus.
+
+    Deux personnes (pseudos proposés DIFFÉRENTS) sont signalées si elles
+    PARTAGENT un token (« Marc Durand » / « Marc Dupont » / « Marc »), ou sont
+    très proches orthographiquement (Levenshtein <= 2 : « Dupont » / « Dupond »).
+    Ajoute à chaque candidat concerné la liste `homonymes` (textes à risque).
+    L'outil ne tranche pas : c'est une ALERTE à lever à la main dans l'éditeur.
+    Retourne le nombre de candidats marqués.
+    """
+    persons = [c for c in candidats if c.get("type") == "PERSONNE"]
+    for c in persons:
+        c.setdefault("homonymes", [])
+    for i in range(len(persons)):
+        for j in range(i + 1, len(persons)):
+            a, b = persons[i], persons[j]
+            if a.get("pseudo_propose") == b.get("pseudo_propose"):
+                continue  # déjà regroupés comme une même entité
+            ta, tb = _tokens(a["texte"]), _tokens(b["texte"])
+            partage = bool(ta & tb)   # token exactement commun (prénom/nom partagé)
+            # coquille de nom (token à token) : « Dupont » vs « Dupond »
+            proche = any(len(wa) >= 4 and len(wb) >= 4 and _leven(wa, wb) <= 1
+                         for wa in ta for wb in tb)
+            if partage or proche:
+                if b["texte"] not in a["homonymes"]:
+                    a["homonymes"].append(b["texte"])
+                if a["texte"] not in b["homonymes"]:
+                    b["homonymes"].append(a["texte"])
+    return sum(1 for c in persons if c["homonymes"])
 
 
 if __name__ == "__main__":
