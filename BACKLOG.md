@@ -185,16 +185,3 @@ Sur de gros fichiers, le *seek* dans `<audio controls>` peut être limité.
 **Piste** : implémenter les requêtes HTTP `Range` (206 Partial Content) dans le
 serveur. À valider d'abord sur un vrai entretien : peut-être inutile selon le
 format. Identifié le 15/06/2026.
-
-### 19. Porter les réglages batterie dans `veille.ps1 -Installer`
-**Besoin** : la tâche planifiée installée par `veille.ps1 -Installer` hérite des
-défauts `DisallowStartIfOnBatteries=$true` / `StopIfGoingOnBatteries=$true` →
-elle ne tourne pas / est tuée sur batterie. Ces réglages ont été corrigés **à la
-main** sur la tâche en service (17/06) mais **pas dans l'installateur** : une
-réinstallation reviendrait au comportement bloquant.
-
-**Piste** : dans le bloc `if ($Installer)`, après `New-ScheduledTaskSettingsSet`,
-forcer `$settings.DisallowStartIfOnBatteries = $false` et
-`$settings.StopIfGoingOnBatteries = $false` avant le `Register-ScheduledTask`.
-
-**Sévérité** : mineure mais piège à la réinstallation. Identifié le 17/06/2026.

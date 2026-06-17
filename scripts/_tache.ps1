@@ -32,6 +32,9 @@ $entete = @(
 Add-Content -LiteralPath $log -Value $entete -Encoding UTF8
 
 # Tous les flux (succes/erreur/warning/info) vers le log de tache.
-& $orchestrer $Perimetre -TranscribeInline *>> $log
+# -NoEtatMd : c'est la tache "Etat" (_etat_tache.ps1, independante et frequente)
+# qui detient ETAT.md. La transcription inline bloquerait sinon son rafraichissement
+# pendant des heures ; et deux redacteurs = course d'ecriture sur le fichier.
+& $orchestrer $Perimetre -TranscribeInline -NoEtatMd *>> $log
 
 Add-Content -LiteralPath $log -Value "--- Fin du tick : $(Now-Iso) (code $LASTEXITCODE) ---" -Encoding UTF8

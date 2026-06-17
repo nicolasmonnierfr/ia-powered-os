@@ -9,6 +9,32 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.1.0] — 2026-06-17
+
+### Ajouté
+- **Tâche planifiée « État » dédiée** — découple le rafraîchissement de `ETAT.md`
+  de la transcription. La transcription reste *inline* (longue, bloquante) ; une
+  2ᵉ tâche légère et **indépendante** (`scripts/_etat_tache.ps1`, toutes les 2 min,
+  **lecture seule** sauf `ETAT.md`) régénère `ETAT.md` en continu. Résultat :
+  l'état — y compris la **progression `n/total` des tronçons** (lue sur le disque
+  par `etat.py`) — reste à jour **même pendant** une transcription qui dure des
+  heures. Deux instances de tâches distinctes → l'une ne bloque jamais l'autre.
+  `veille.ps1 -Installer` installe désormais les **deux** tâches (nouveau
+  paramètre `-IntervalleEtatMin`, défaut 2 min).
+
+### Corrigé
+- **#19** — `veille.ps1 -Installer` débloque la batterie pour les tâches
+  (`DisallowStartIfOnBatteries`/`StopIfGoingOnBatteries` = False). Auparavant, les
+  défauts du Planificateur (True) empêchaient la tâche de tourner / la tuaient sur
+  batterie ; le correctif n'était appliqué qu'à la main sur la tâche en service.
+
+### Modifié
+- `_tache.ps1` (tâche de transcription) passe `-NoEtatMd` : la tâche « État » est
+  l'**unique rédactrice** de `ETAT.md` (évite une course d'écriture entre les deux
+  tâches).
+
+---
+
 ## [1.0.0] — 2026-06-17
 
 Première version versionnée. Consolide le pipeline complet de traitement des
@@ -120,4 +146,5 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.1.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.0.0
