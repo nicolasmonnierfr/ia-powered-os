@@ -110,6 +110,7 @@
 
 <header>
   <h1>Éditeur d'alias</h1>
+  <span id="refName" title="Fichier de référence (audio d'origine)" style="font-weight:600;color:var(--ink);font-size:14px;"></span>
   <label class="loader">État de détection (.etat.json)
     <input type="file" id="stateFile" accept=".json,application/json"></label>
   <label class="loader">ou mémoire client (memoire_client.json)
@@ -151,7 +152,13 @@
   let generiques = [];      // étiquettes de locuteurs génériques (chaînes)
   let transcriptName = "";
   let memoireChargee = null;  // memoire_client.json chargée (préserve client/réglages/compteurs)
+  let hasDetection = false;   // une détection (etat.json) du fichier courant a-t-elle été chargée ?
   let uid = 1;
+
+  // A : une variante est masquée si elle vient de la mémoire (pas `nouveau`) et
+  // n'est PAS présente dans le fichier analysé (`present`). Uniquement quand une
+  // détection est chargée (sinon on édite la mémoire seule -> tout afficher).
+  function isHidden(v) { return hasDetection && !v.nouveau && !v.present; }
 
   const wrap = document.getElementById("wrap");
   const statsEl = document.getElementById("stats");
@@ -224,6 +231,7 @@
 
   function loadFromState(data) {
     transcriptName = data.transcript || "";
+    hasDetection = true;
     groups = []; ignored = []; generiques = [];
     // Regrouper les candidats par pseudo_propose (le moteur a déjà pré-groupé Thomas/Tom)
     const byPseudo = {};
@@ -278,27 +286,39 @@
   // est ignorée ; sinon elle rejoint le groupe de son pseudo proposé, ou crée
   // un nouveau groupe.
   function mergeFromState(data) {
-    const connues = new Set();
-    groups.forEach(g => g.variants.forEach(v => connues.add(v.texte.toLowerCase())));
+    hasDetection = true;
+    const varByLow = {};   // variante existante (mémoire) par texte minuscule
+    groups.forEach(g => g.variants.forEach(v => { varByLow[v.texte.toLowerCase()] = v; }));
     const ignoreLow = new Set(ignored.map(it => it.texte.toLowerCase()));
     const byPseudo = {};
     groups.forEach(g => { byPseudo[g.pseudo] = g; });
 
     for (const c of (data.candidats || [])) {
       const low = c.texte.toLowerCase();
-      if (connues.has(low) || ignoreLow.has(low)) continue;
+      if (ignoreLow.has(low)) continue;
+      const ev = varByLow[low];
+      if (ev) {
+        // Label déjà connu (mémoire) ET présent dans CE fichier : on le marque
+        // présent (-> reste affiché) et on l'enrichit (occurrences/timecodes).
+        ev.present = true;
+        ev.occurrences = c.occurrences || ev.occurrences || 1;
+        if (c.positions && c.positions.length) ev.positions = c.positions;
+        if (c.homonymes && c.homonymes.length) ev.homonymes = c.homonymes;
+        continue;
+      }
       const key = c.pseudo_propose || (c.type + "_?");
       let g = byPseudo[key];
       if (!g) {
         g = { id: nextId(), pseudo: key, type: c.type, variants: [] };
         groups.push(g); byPseudo[key] = g;
       }
-      g.variants.push({
+      const nv = {
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
         positions: c.positions || [], homonymes: c.homonymes || [], nouveau: true
-      });
-      connues.add(low);
+      };
+      g.variants.push(nv);
+      varByLow[low] = nv;
     }
     render();
   }
@@ -318,7 +338,7 @@
     lblA.className = "section-label"; lblA.textContent = "Entités à anonymiser — un groupe = un pseudonyme";
     wrap.appendChild(lblA);
 
-    groups.forEach(g => wrap.appendChild(renderGroup(g)));
+    groups.forEach(g => { const node = renderGroup(g); if (node) wrap.appendChild(node); });
 
     const lblI = document.createElement("div");
     lblI.className = "section-label";
@@ -336,6 +356,12 @@
   }
 
   function renderGroup(g) {
+    // A : on n'affiche que les variantes PERTINENTES pour le fichier en cours
+    // (nouvelles, ou variantes de la memoire effectivement presentes dans ce
+    // fichier). Les labels de la memoire absents d'ici sont masques — mais le
+    // groupe reste dans `groups` (donc cible de fusion + conserve a l'export).
+    const visibles = g.variants.filter(v => !isHidden(v));
+    if (visibles.length === 0) return null;   // groupe entierement hors fichier -> masque
     const el = document.createElement("div");
     el.className = "group"; el.dataset.id = g.id;
 
@@ -359,8 +385,10 @@
 
     const count = document.createElement("span");
     count.className = "count";
-    const totalOcc = g.variants.reduce((a, v) => a + (v.occurrences || 0), 0);
-    count.textContent = `${g.variants.length} variante(s) · ${totalOcc} occ.`;
+    const totalOcc = visibles.reduce((a, v) => a + (v.occurrences || 0), 0);
+    const masquees = g.variants.length - visibles.length;
+    count.textContent = `${visibles.length} variante(s) · ${totalOcc} occ.`
+      + (masquees ? ` (+${masquees} hors fichier)` : "");
 
     const actions = document.createElement("div");
     actions.className = "group-actions";
@@ -378,7 +406,7 @@
 
     const vars = document.createElement("div");
     vars.className = "variants";
-    g.variants.forEach(v => vars.appendChild(renderVariant(g, v)));
+    visibles.forEach(v => vars.appendChild(renderVariant(g, v)));
     el.appendChild(vars);
 
     // drop target pour le regroupement par glisser-déposer
@@ -732,6 +760,7 @@
     try {
       const man = await (await fetch("/api/manifest")).json();
       audioAvailable = !!man.audio;   // active les boutons ▶ de réécoute
+      if (man.reference) document.getElementById("refName").textContent = "🎧 " + man.reference;
       // Refonte #14/#17 : si une mémoire client existe au périmètre, on la
       // charge ; puis on FUSIONNE les nouvelles détections de l'état (sans
       // écraser les regroupements existants). Sinon on initialise depuis l'état.

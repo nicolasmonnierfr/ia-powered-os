@@ -50,6 +50,12 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
 - **Éditeur d'alias — nouveaux labels distingués** : un label détecté dans CE
   fichier mais pas encore dans la mémoire client est affiché sur **fond vert**
   (≠ labels déjà connus de la mémoire). Aide à repérer ce qui reste à traiter.
+- **Nom du fichier de référence affiché** (audio d'origine, « 🎧 X.m4a ») dans le
+  tagueur ET l'éditeur d'alias — repère stable tout au long du workflow.
+- **Éditeur d'alias — masquage des labels hors fichier** : les labels de la
+  mémoire client **absents du fichier en cours** sont masqués de la vue principale
+  (allègement). Ils restent **cibles de fusion** (liste « Fusionner vers… ») et
+  **conservés à l'export** ; le groupe indique « +N hors fichier ».
 
 ### Modifié
 - **Éditeur d'alias — « Fusionner vers… » cliquable** : remplace le `prompt()`

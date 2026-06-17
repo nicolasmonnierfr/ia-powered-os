@@ -221,6 +221,7 @@
 
 <header>
   <h1>Tagueur de locuteurs</h1>
+  <span id="refName" title="Fichier de référence (audio d'origine)" style="font-weight:600;color:var(--ink);font-size:14px;"></span>
   <div class="file-loaders">
     <button class="btn" id="openDir" title="Ouvre (ou recharge) le dossier racine de l'entretien : charge l'audio + le .srt et prepare l'export vers 2_coupe">Ouvrir le dossier de l'entretien</button>
     <button class="btn btn-ghost" id="changeDir" title="Choisir un autre dossier d'entretien">Changer</button>
@@ -1285,6 +1286,7 @@
     try {
       const man = await (await fetch("/api/manifest")).json();
       locuteursConnus = man.locuteurs_connus || [];   // pre-remplissage des noms (coherence inter-entretiens)
+      if (man.reference) { const r = document.getElementById("refName"); if (r) r.textContent = "🎧 " + man.reference; }
       // Audio
       if (man.audio) {
         const blob = await (await fetch("/api/audio")).blob();
