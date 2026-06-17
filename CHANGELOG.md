@@ -18,7 +18,20 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
   locuteur n'était assigné (régression Phase 2 — il ne traitait que les locuteurs
   déjà *utilisés*). Il renomme de nouveau **tous** les locuteurs (`nameAllSpeakers`).
 
+### Ajouté
+- **Tagueur — Fusionner** : bouton « Fusionner » (touche **F**) qui réunit les
+  segments sélectionnés (plage Maj+clic / Maj+↑↓) en **un seul** — rattrape une
+  sur-segmentation ou une scission erronée.
+- **Tagueur — bouton ▶ par segment** : lit à partir de ce segment (entre le temps
+  et le texte).
+
 ### Modifié
+- **Panneau « Scinder » refondu** : lecture/pause de l'extrait, **curseur ▲
+  positionnable** sous la timeline (glisser), bouton « ⟐ Couper au point lu »
+  (place la coupe au point d'écoute + met en pause), et « ▶ Avant la coupe » /
+  « ▶ Après la coupe » pour valider le point choisi.
+- **Sélection dissociée de la lecture** : cliquer un segment ne démarre **plus**
+  la lecture automatiquement (lecture via le ▶ du segment, Espace ou Entrée).
 - **Nommage des locuteurs en TOUTE PREMIÈRE étape** à l'ouverture du tagueur :
   on nomme « Locuteur 1 / 2 » (noms réels, suggérés) **avant** la réconciliation,
   qui affiche alors directement ces noms (au lieu de « Loc 1/2 »). Nouvelle

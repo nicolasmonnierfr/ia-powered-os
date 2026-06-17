@@ -88,13 +88,17 @@
   .group-label { font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
 
   .seg {
-    display: grid; grid-template-columns: 70px 14px 1fr; gap: 10px; align-items: start;
+    display: grid; grid-template-columns: 70px 22px 14px 1fr; gap: 10px; align-items: start;
     padding: 7px 16px; border-left: 3px solid transparent; cursor: pointer; border-bottom: 1px solid transparent;
   }
   .seg:hover { background: rgba(255,255,255,0.03); }
   .seg.selected { background: rgba(255,255,255,0.06); border-bottom-color: var(--line); }
   .seg.playing { background: var(--playing); border-left-color: var(--playing-edge); }
   .seg .time { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; padding-top: 2px; white-space: nowrap; }
+  .seg .seg-play { width: 20px; height: 20px; padding: 0; margin-top: 1px; border: 1px solid var(--line);
+    background: var(--panel-2, #232732); color: var(--ink-dim); border-radius: 4px; cursor: pointer;
+    font-size: 10px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .seg .seg-play:hover { color: var(--ink); filter: brightness(1.3); }
   .seg .marker { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--untagged); }
   .seg .text { color: var(--ink); }
   .seg.untagged .text { color: var(--ink-dim); }
@@ -264,7 +268,8 @@
   <span class="sep"></span>
   <button class="btn btn-ghost" data-action="cut" id="btnCut"><span class="kbd">C</span>✂ Couper</button>
   <span class="sep"></span>
-  <button class="btn btn-ghost" data-action="split" id="btnSplit" title="Diviser le segment en deux au point de lecture (diarisation ayant fusionné deux voix)"><span class="kbd">S</span>Scinder</button>
+  <button class="btn btn-ghost" data-action="split" id="btnSplit" title="Diviser le segment en deux (diarisation ayant fusionné deux voix)"><span class="kbd">S</span>Scinder</button>
+  <button class="btn btn-ghost" data-action="merge" id="btnMerge" title="Fusionner en un seul les segments sélectionnés (Maj+clic ou Maj+↑/↓ pour la plage)"><span class="kbd">F</span>Fusionner</button>
   <span class="sep"></span>
   <button class="btn btn-ghost" data-action="prevturn" title="Aller au locuteur précédent (Alt+↑)">⏮ Locuteur</button>
   <button class="btn btn-ghost" data-action="nextturn" title="Aller au prochain changement de locuteur (Alt+↓)">Locuteur ⏭</button>
@@ -302,14 +307,20 @@
   <div style="background:var(--panel,#1c1f26); color:var(--ink,#e6e8ec); border:1px solid var(--line,#2e3340); border-radius:10px; width:min(760px,92vw); padding:16px; box-shadow:0 12px 48px rgba(0,0,0,.55);">
     <div style="font-weight:600; margin-bottom:6px;">Scinder le segment</div>
     <div style="font-size:12px; color:var(--ink-dim,#9aa1ad); margin-bottom:10px;">
-      Clique sur la mini-timeline pour placer le point de coupe <b>audio</b>
-      (zone verte = ce segment ; gris = contexte avant/après, écoute seulement).
-      Place le curseur dans le texte au point de coupe <b>texte</b>, puis « Scinder ».
+      Écoute l'extrait (▶), puis place le point de coupe <b>audio</b> : déplace le
+      curseur ▲ sous la timeline, ou « ⟐ Couper au point lu » pendant l'écoute
+      (zone verte = ce segment ; gris = contexte avant/après). Place le curseur
+      dans le <b>texte</b> au point de coupe, puis « Scinder ».
     </div>
-    <div id="splitTl" style="position:relative; height:52px; background:#14161a; border:1px solid var(--line,#2e3340); border-radius:6px; cursor:crosshair; overflow:hidden; margin-bottom:8px;"></div>
-    <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
-      <button class="btn btn-ghost" id="splitPlayCtx">▶ Contexte</button>
-      <button class="btn btn-ghost" id="splitPlaySeg">▶ Segment</button>
+    <div id="splitTl" style="position:relative; height:52px; background:#14161a; border:1px solid var(--line,#2e3340); border-radius:6px 6px 0 0; cursor:crosshair; overflow:hidden;"></div>
+    <div id="splitCursorRow" title="Glisse pour positionner le point de coupe" style="position:relative; height:18px; margin-bottom:8px; cursor:ew-resize;">
+      <div id="splitCursor" style="position:absolute; left:50%; top:0; transform:translateX(-50%); color:#e8a04e; font-size:13px; line-height:18px; user-select:none; pointer-events:none;">▲</div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+      <button class="btn" id="splitPlayPause">▶ Lire l'extrait</button>
+      <button class="btn btn-ghost" id="splitPlayBefore">▶ Avant la coupe</button>
+      <button class="btn btn-ghost" id="splitPlayAfter">▶ Après la coupe</button>
+      <button class="btn btn-ghost" id="splitSetHere" title="Place la coupe au point de lecture courant (mets en pause)">⟐ Couper au point lu</button>
       <span id="splitTimeLbl" style="font-size:12px; color:var(--ink-dim,#9aa1ad); margin-left:auto;"></span>
     </div>
     <textarea id="splitText" rows="4" style="width:100%; background:#14161a; color:var(--ink,#e6e8ec); border:1px solid var(--line,#2e3340); border-radius:6px; padding:8px; font:inherit; resize:vertical;"></textarea>
@@ -329,6 +340,10 @@
     <dt>Maj+1 … 4</dt><dd>Nouvelle prise de parole (ce segment + suivants)</dd>
     <dt>0</dt><dd>Effacer l'affectation</dd>
     <dt>C</dt><dd>Couper / rétablir le(s) segment(s) sélectionné(s)</dd>
+    <dt>S</dt><dd>Scinder le segment (fenêtre dédiée)</dd>
+    <dt>F</dt><dd>Fusionner les segments sélectionnés (plage)</dd>
+    <dt>Alt+↑ / ↓</dt><dd>Locuteur précédent / suivant (changement de voix)</dd>
+    <dt>▶ (sur un segment)</dt><dd>Lire à partir d'ici — la sélection seule ne lit pas</dd>
     <dt>↑ / ↓</dt><dd>Segment précédent / suivant</dd>
     <dt>Maj+↑ / ↓</dt><dd>Étendre la sélection (taguer plusieurs segments d'un coup)</dd>
     <dt>← / →</dt><dd>Reculer / avancer l'audio de 3 s</dd>
@@ -514,7 +529,9 @@
       hint.textContent = "double-clic pour éditer";
       text.appendChild(hint);
 
-      div.appendChild(time); div.appendChild(marker); div.appendChild(text);
+      const play = document.createElement("button");
+      play.className = "seg-play"; play.textContent = "▶"; play.title = "Lire à partir d'ici";
+      div.appendChild(time); div.appendChild(play); div.appendChild(marker); div.appendChild(text);
       frag.appendChild(div);
     });
     segList.appendChild(frag);
@@ -759,12 +776,21 @@
   });
 
   segList.addEventListener("click", (e) => {
+    const playBtn = e.target.closest(".seg-play");
     const seg = e.target.closest(".seg");
     if (!seg) return;
     if (e.target.closest(".text-edit")) return;
     const i = +seg.dataset.i;
-    if (e.shiftKey) { select(i, false, true); }   // Maj+clic : etend la plage
-    else { select(i, true, false); }
+    if (playBtn) {                                 // bouton ▶ : lit a partir d'ici
+      select(i, false, false);
+      try { player.currentTime = segments[i].start; } catch (x) {}
+      player.play();
+      return;
+    }
+    // #3 : la SELECTION ne demarre PAS la lecture (dissociee). On lit via le
+    // bouton ▶ du segment, Espace, ou Entree.
+    if (e.shiftKey) { select(i, false, true); }    // Maj+clic : etend la plage
+    else { select(i, false, false); }
   });
 
   // ---- Edition inline du texte (double-clic) ----
@@ -845,6 +871,7 @@
     if (action === "cut") { if (selected >= 0) toggleCut(); return; }
     if (selected < 0) return;
     if (action === "split")    { openSplitPanel(selected); return; }
+    if (action === "merge")    { mergeSelected(); return; }
     if (action === "nextturn") { jumpSpeaker(1); return; }
     if (action === "prevturn") { jumpSpeaker(-1); return; }
     const loc = +btn.dataset.loc;
@@ -891,9 +918,10 @@
     };
     const ta = document.getElementById("splitText");
     ta.value = seg.text || "";
-    renderSplitTimeline();
-    updateSplitLabel();
     document.getElementById("splitPanel").style.display = "flex";
+    renderSplitTimeline();
+    setSplitTime(splitCtx.splitTime, false);   // place marqueur + curseur ▲ + label
+    updateSplitPlayBtn();
     if (splitTimer) { clearTimeout(splitTimer); splitTimer = null; }
     player.pause();
     try { player.currentTime = splitCtx.t0; } catch (e) {}
@@ -981,30 +1009,101 @@
     select(i + 1, false, false);       // selectionne la 2e moitie (a re-taguer)
   }
 
-  // --- Wiring du panneau de scission ---
-  document.getElementById("splitTl").addEventListener("click", (e) => {
+  // #2 : fusionne les segments SELECTIONNES (plage) en un seul. Rattrape une
+  // sur-segmentation (diarisation trop fine) ou une scission erronee.
+  function mergeSelected() {
+    const r = selRange();
+    if (!r || r.lo === r.hi) {
+      alert("Selectionne d'abord PLUSIEURS segments a fusionner (Maj+clic, ou Maj+Haut/Bas).");
+      return;
+    }
+    const segs = segments.slice(r.lo, r.hi + 1);
+    const fusion = {
+      start: segs[0].start,
+      end: segs[segs.length - 1].end,
+      text: segs.map(s => (s.text || "").trim()).filter(Boolean).join(" "),
+      speaker: segs[0].speaker,
+      turnStart: segs[0].turnStart,
+      edited: true,
+      cut: segs.every(s => s.cut),
+      label: segs[0].label,
+    };
+    segments.splice(r.lo, segs.length, fusion);
+    selAnchor = r.lo;
+    render();
+    select(r.lo, false, false);
+  }
+
+  // Positionne le point de coupe (marqueur sur la timeline + curseur ▲ dessous
+  // + label). `pause` : met la lecture en pause (on voit/entend ou ca coupe).
+  function setSplitTime(t, pause) {
     if (!splitCtx) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const frac = (e.clientX - rect.left) / rect.width;
-    let t = splitCtx.t0 + frac * (splitCtx.t1 - splitCtx.t0);
     t = Math.min(Math.max(t, splitCtx.segStart + 0.05), splitCtx.segEnd - 0.05);
     splitCtx.splitTime = t;
-    const mk = document.getElementById("splitMk");
-    if (mk) mk.style.left = splitFrac(t) + "%";
-    try { player.currentTime = t; } catch (e2) {}
+    const pct = splitFrac(t) + "%";
+    const mk = document.getElementById("splitMk"); if (mk) mk.style.left = pct;
+    const cur = document.getElementById("splitCursor"); if (cur) cur.style.left = pct;
+    if (pause) player.pause();
     updateSplitLabel();
+  }
+  function splitTimeFromX(clientX) {
+    const rect = document.getElementById("splitTl").getBoundingClientRect();
+    let frac = (clientX - rect.left) / rect.width;
+    frac = Math.min(Math.max(frac, 0), 1);
+    return splitCtx.t0 + frac * (splitCtx.t1 - splitCtx.t0);
+  }
+  function updateSplitPlayBtn() {
+    const b = document.getElementById("splitPlayPause");
+    if (b) b.textContent = (splitCtx && !player.paused) ? "⏸ Pause" : "▶ Lire l'extrait";
+  }
+
+  // --- Wiring du panneau de scission ---
+  // Clic sur la timeline = place la coupe + pause + seek (on voit ou ca coupe).
+  document.getElementById("splitTl").addEventListener("click", (e) => {
+    if (!splitCtx) return;
+    setSplitTime(splitTimeFromX(e.clientX), true);
+    try { player.currentTime = splitCtx.splitTime; } catch (e2) {}
   });
-  document.getElementById("splitPlayCtx").addEventListener("click", () => { if (splitCtx) splitPlayRegion(splitCtx.t0, splitCtx.t1); });
-  document.getElementById("splitPlaySeg").addEventListener("click", () => { if (splitCtx) splitPlayRegion(splitCtx.segStart, splitCtx.segEnd); });
-  document.getElementById("splitApply").addEventListener("click", applySplit);
+  // Curseur ▲ sous la timeline : glisser pour positionner finement.
+  (function () {
+    let drag = false;
+    const move = (e) => {
+      if (!drag || !splitCtx) return;
+      setSplitTime(splitTimeFromX(e.clientX), true);
+      try { player.currentTime = splitCtx.splitTime; } catch (x) {}
+    };
+    document.getElementById("splitCursorRow").addEventListener("mousedown", (e) => { drag = true; move(e); });
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", () => { drag = false; });
+  })();
+  // Lecture / pause de l'extrait (contexte [t0, t1]).
+  document.getElementById("splitPlayPause").addEventListener("click", () => {
+    if (!splitCtx) return;
+    if (!player.paused) { player.pause(); return; }
+    if (player.currentTime < splitCtx.t0 || player.currentTime >= splitCtx.t1 - 0.02) {
+      try { player.currentTime = splitCtx.t0; } catch (e) {}
+    }
+    if (splitTimer) { clearTimeout(splitTimer); splitTimer = null; }
+    player.play().catch(() => {});
+  });
+  // Rejouer AVANT / APRES la coupe (pour valider le point choisi).
+  document.getElementById("splitPlayBefore").addEventListener("click", () => { if (splitCtx) splitPlayRegion(splitCtx.segStart, splitCtx.splitTime); });
+  document.getElementById("splitPlayAfter").addEventListener("click", () => { if (splitCtx) splitPlayRegion(splitCtx.splitTime, splitCtx.segEnd); });
+  // Definir la coupe au point de lecture courant (ecouter -> "couper ici").
+  document.getElementById("splitSetHere").addEventListener("click", () => { if (splitCtx) setSplitTime(player.currentTime, true); });
+  document.getElementById("splitApply").addEventListener("click", () => { player.pause(); applySplit(); });
   document.getElementById("splitCancel").addEventListener("click", closeSplitPanel);
   document.getElementById("splitPanel").addEventListener("click", (e) => { if (e.target.id === "splitPanel") closeSplitPanel(); });
   document.addEventListener("keydown", (e) => { if (splitCtx && e.key === "Escape") { e.preventDefault(); closeSplitPanel(); } }, true);
+  // Playhead + auto-pause en fin de contexte + maj du bouton lire/pause.
   player.addEventListener("timeupdate", () => {
     if (!splitCtx) return;
+    if (!player.paused && player.currentTime >= splitCtx.t1 - 0.02) player.pause();
     const ph = document.getElementById("splitPh");
-    if (ph) ph.style.left = splitFrac(player.currentTime) + "%";
+    if (ph) ph.style.left = splitFrac(Math.min(player.currentTime, splitCtx.t1)) + "%";
   });
+  player.addEventListener("play", updateSplitPlayBtn);
+  player.addEventListener("pause", updateSplitPlayBtn);
 
   document.addEventListener("keydown", (e) => {
     if (e.target.matches("input, select, textarea")) return;
@@ -1031,6 +1130,7 @@
     if (e.key === "0") { clearSegment(selected); return; }
     if (e.key === "c" || e.key === "C") { toggleCut(); return; }
     if (e.key === "s" || e.key === "S") { openSplitPanel(selected); return; }   // #1 : scinder
+    if (e.key === "f" || e.key === "F") { mergeSelected(); return; }            // #2 : fusionner
     const num = parseInt(e.key, 10);
     if (!isNaN(num) && num >= 1 && num <= nSpeakers) {
       const r = selRange();
