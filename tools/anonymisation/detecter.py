@@ -62,25 +62,30 @@ def parse_transcript(path: Path):
             lines = [l for l in chunk.split("\n") if l.strip() != ""]
             if not lines:
                 continue
+            start = end = None
             body_lines = []
             for l in lines:
                 if re.fullmatch(r"\d+", l.strip()):
                     continue
                 if "-->" in l:
+                    g = l.split("-->")
+                    if len(g) == 2:
+                        start = _srt_time_to_sec(g[0])
+                        end = _srt_time_to_sec(g[1])
                     continue
                 body_lines.append(l)
             if not body_lines:
                 continue
             text = " ".join(body_lines).strip()
             label, text = _split_label(text)
-            blocks.append({"label": label, "text": text})
+            blocks.append({"label": label, "text": text, "start": start, "end": end})
     else:
         for line in raw.replace("\r", "").split("\n"):
             if line.strip() == "":
                 continue
             label, text = _split_label(line.strip())
             if label is not None or not blocks:
-                blocks.append({"label": label, "text": text})
+                blocks.append({"label": label, "text": text, "start": None, "end": None})
             else:
                 blocks[-1]["text"] += " " + text
     return blocks
@@ -92,6 +97,15 @@ def _split_label(text):
     if m:
         return m.group(1).strip(), text[m.end():]
     return None, text
+
+
+def _srt_time_to_sec(t):
+    """'HH:MM:SS,mmm' (ou '.mmm') -> secondes (float), ou None si non parsable."""
+    m = re.match(r"\s*(\d+):(\d+):(\d+)[,.](\d+)", t)
+    if not m:
+        return None
+    h, mi, s, ms = (int(x) for x in m.groups())
+    return h * 3600 + mi * 60 + s + ms / 1000.0
 
 
 # ---------------------------------------------------------------------------
@@ -185,28 +199,38 @@ def main():
     analyzer = build_analyzer()
 
     found = {}
+    # Plafond du nombre de positions (timecodes) conservées par candidat, pour
+    # eviter de gonfler le .etat.json sur un terme tres frequent. occurrences = total.
+    MAX_POSITIONS = 60
 
-    def add_occurrence(txt, typ_interne, score, contexte, source):
+    def add_occurrence(txt, typ_interne, score, contexte, source, start=None, end=None):
         key = txt.strip()
         if not key or key.lower() in ignorer:
             return
         if key not in found:
             found[key] = {"texte": key, "type": typ_interne, "occurrences": 0,
-                          "score": score, "source": source, "exemples": []}
+                          "score": score, "source": source, "exemples": [],
+                          "positions": []}
         c = found[key]
         c["occurrences"] += 1
         c["score"] = max(c["score"], score)
         if len(c["exemples"]) < 2 and contexte:
             c["exemples"].append(contexte)
+        # Timecode de l'occurrence (= bloc/sous-titre la contenant) pour la
+        # reecoute audio + le renvoi vers le tagueur dans l'editeur.
+        if start is not None and len(c["positions"]) < MAX_POSITIONS:
+            c["positions"].append({"start": start, "end": end, "extrait": contexte})
 
     for b in blocks:
         if b["label"] and b["label"].lower() not in generiques:
             add_occurrence(b["label"], "PERSONNE", 0.99,
-                           f"[{b['label']}] {b['text'][:40]}…", "etiquette")
+                           f"[{b['label']}] {b['text'][:40]}…", "etiquette",
+                           start=b.get("start"), end=b.get("end"))
         for (txt, ptype, score) in detect_in_text(analyzer, b["text"], types, seuil):
             typ = M.TYPE_FROM_PRESIDIO.get(ptype, ptype)
             ctx = _context(b["text"], txt)
-            add_occurrence(txt, typ, score, ctx, "ner")
+            add_occurrence(txt, typ, score, ctx, "ner",
+                           start=b.get("start"), end=b.get("end"))
 
     # Forçages connus : ré-exposés en candidats (cohérence dans l'éditeur)
     for e in mem.get("entrees", []):
@@ -219,7 +243,8 @@ def main():
             elif v.lower() not in ignorer:
                 occ = len(re.findall(re.escape(v), full_text, flags=re.IGNORECASE))
                 found[v] = {"texte": v, "type": e["type"], "occurrences": occ,
-                            "score": 1.0, "source": "alias", "exemples": []}
+                            "score": 1.0, "source": "alias", "exemples": [],
+                            "positions": []}
                 ctx = _context(full_text, v)
                 if ctx:
                     found[v]["exemples"].append(ctx)
@@ -228,6 +253,10 @@ def main():
 
     etat = {
         "transcript": tpath.name,
+        # Dossier du transcript (ex. "2_coupe" / "1_transcription") : permet a
+        # l'editeur de retrouver l'AUDIO dont les timecodes des positions sont
+        # relatifs (audio coupe vs audio brut). Cf. serveur_editeur.py.
+        "transcript_dir": tpath.parent.name,
         "candidats": candidats,
         "memoire_source": args.memoire or None,
     }
