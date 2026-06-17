@@ -1097,6 +1097,7 @@
       lastPlaying = -1;
       render();
       if (selected >= 0) select(0, false);
+      nameAllSpeakers(true);   // 1re chose : nommer les locuteurs, AVANT la reconciliation
       openReconcile(labels);
       return;
     }
@@ -1130,7 +1131,7 @@
     lastPlaying = -1;
     render();
     if (selected >= 0) select(0, false);
-    renameSpeakers(true);   // nommage OBLIGATOIRE des le chargement (diarisation simple / sans reconciliation)
+    nameAllSpeakers(true);   // 1re chose : nommage OBLIGATOIRE des le chargement (diarisation simple / sans reconciliation)
   }
 
   document.getElementById("srtFile").addEventListener("change", (e) => {
@@ -1360,6 +1361,24 @@
       ? `\n\nConnus pour ce client (réutilise le MÊME nom pour la cohérence) :\n  ${locuteursConnus.join("  ·  ")}`
       : "";
     for (const i of cibles) {
+      const def = isDefaultName(i) ? "" : names[i];
+      const n = prompt(`Nom du locuteur ${i + 1} — OBLIGATOIRE${hint}`, def);
+      if (n && n.trim()) names[i] = n.trim();
+    }
+    buildControls();
+    refreshClasses();
+  }
+
+  // Nomme TOUS les locuteurs globaux (1..nSpeakers), même pas encore assignés.
+  // Utilisé À L'OUVERTURE, AVANT la réconciliation : on décide d'abord « qui est
+  // Locuteur 1 / 2 » (noms réels), puis on mappe les étiquettes locales dessus
+  // (le panneau de réconciliation affiche alors directement les noms).
+  function nameAllSpeakers(onlyMissing) {
+    const hint = locuteursConnus.length
+      ? `\n\nConnus pour ce client (réutilise le MÊME nom pour la cohérence) :\n  ${locuteursConnus.join("  ·  ")}`
+      : "";
+    for (let i = 0; i < nSpeakers; i++) {
+      if (onlyMissing && !isDefaultName(i)) continue;
       const def = isDefaultName(i) ? "" : names[i];
       const n = prompt(`Nom du locuteur ${i + 1} — OBLIGATOIRE${hint}`, def);
       if (n && n.trim()) names[i] = n.trim();

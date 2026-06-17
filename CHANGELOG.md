@@ -9,6 +9,19 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [Non publié]
+
+Retours de test (tagueur). À consolider en version taguée une fois la salve finie.
+
+### Modifié
+- **Nommage des locuteurs en TOUTE PREMIÈRE étape** à l'ouverture du tagueur :
+  on nomme « Locuteur 1 / 2 » (noms réels, suggérés) **avant** la réconciliation,
+  qui affiche alors directement ces noms (au lieu de « Loc 1/2 »). Nouvelle
+  fonction `nameAllSpeakers` (nomme tous les locuteurs globaux, même pas encore
+  assignés). `tagger.html`.
+
+---
+
 ## [1.6.1] — 2026-06-17
 
 ### Modifié
