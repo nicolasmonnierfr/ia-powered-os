@@ -21,6 +21,17 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
   on pouvait avoir un changement de locuteur sans badge. `turnStart` est désormais
   **recalculé** depuis la séquence des locuteurs après chaque édition (affecter,
   prise de parole, effacer, scinder, fusionner). `tagger.html`.
+- **Réouverture du tagueur : reprise de la dernière version (plus de « branche
+  orpheline »)**. À la réouverture (ex. depuis l'analyse via ✎), le tagueur
+  chargeait toujours le transcript brut (`1_transcription`, étiquettes locales)
+  → réconciliation + nommage à refaire, sans les coupes. Désormais :
+  - `serveur_tagueur.py` sert la version la plus **avancée** : `2_coupe` (tagué +
+    coupé) si présent, avec l'**audio coupé** correspondant (timecodes alignés),
+    sinon `1_transcription` + audio brut.
+  - `tagger.html` **conserve les noms** de locuteurs lus dans les étiquettes
+    `[Nom]` (plus de re-nommage) ; `stemFromAudio` retire un `_coupe` superflu
+    pour que la ré-export **écrase** `X_coupe.*` au lieu de créer `X_coupe_coupe.*`.
+  → On peut rouvrir, corriger le texte et ré-exporter sans tout refaire.
 
 ### Ajouté
 - **Tagueur — Fusionner** : bouton « Fusionner » (touche **F**) qui réunit les

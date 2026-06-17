@@ -1228,12 +1228,17 @@
 
     // Pre-remplissage direct depuis une diarisation simple (SPEAKER_xx, etc.)
     if (labels.length > 0) {
-      const usable = Math.min(labels.length, MAX);
-      const targetN = Math.max(2, usable);
-      nSpeakers = targetN;
-      document.getElementById("speakerCount").value = String(targetN);
+      // labels = VRAIS NOMS (re-ouverture d'un transcript deja tague, ex. 2_coupe)
+      // ou SPEAKER_xx (diarisation simple). On mappe chaque label a un index ET on
+      // CONSERVE le nom dans names[] -> si ce sont deja de vrais noms, pas de
+      // re-nommage (corrige : reouverture qui repartait de zero). On ignore
+      // l'etiquette "NON_AFFECTE" (segments non affectes a l'export precedent).
+      const reels = labels.filter(l => l && l !== "NON_AFFECTE");
+      const usable = Math.min(reels.length, MAX);
+      nSpeakers = Math.max(2, usable || 2);
+      document.getElementById("speakerCount").value = String(nSpeakers);
       const map = {};
-      labels.forEach((lab, idx) => { if (idx < MAX) map[lab] = idx; });
+      reels.forEach((lab, idx) => { if (idx < MAX) { map[lab] = idx; names[idx] = lab; } });
       let dropped = 0, prevSpeaker = null;
       for (const seg of segments) {
         if (seg.label && map[seg.label] !== undefined) {
@@ -1242,12 +1247,12 @@
           prevSpeaker = seg.speaker;
         } else {
           seg.speaker = null; seg.turnStart = false; prevSpeaker = null;
-          if (seg.label) dropped++;
+          if (seg.label && seg.label !== "NON_AFFECTE") dropped++;
         }
       }
       buildControls();
-      if (labels.length > MAX) {
-        alert(`Le fichier contient ${labels.length} locuteurs. L'outil en gère ${MAX} au maximum ; les segments des locuteurs supplémentaires sont laissés en « non affecté » (${dropped} segment(s)).`);
+      if (reels.length > MAX) {
+        alert(`Le fichier contient ${reels.length} locuteurs. L'outil en gère ${MAX} au maximum ; les segments des locuteurs supplémentaires sont laissés en « non affecté » (${dropped} segment(s)).`);
       }
     }
 
@@ -1474,7 +1479,8 @@
   }
   function isDefaultName(i) {
     const n = (names[i] || "").trim();
-    return !n || /^Locuteur\s*\d+$/i.test(n);
+    // "Locuteur N", "SPEAKER_00", "NON_AFFECTE"... = pas un vrai nom -> a nommer.
+    return !n || /^Locuteur\s*\d+$/i.test(n) || /^(SPEAKER|SPK|LOC)[ _-]?\d+$/i.test(n) || n === "NON_AFFECTE";
   }
   function namesComplete() { return usedSpeakers().every(i => !isDefaultName(i)); }
 
@@ -1627,7 +1633,10 @@
   //     individuels ET par l'export groupe, pour garantir la coherence). ---
   function stemFromAudio() {
     if (!audioFileName) return "transcription_taggee";
-    return audioFileName.replace(/\.[^.]+$/, "");
+    // On retire un suffixe "_coupe" eventuel : si on a rouvert la version coupee
+    // (audio "X_coupe.m4a"), la re-export reste "X_coupe.srt" (ecrase) au lieu
+    // de produire "X_coupe_coupe.srt".
+    return audioFileName.replace(/\.[^.]+$/, "").replace(/_coupe$/i, "");
   }
 
   function buildTxt() {

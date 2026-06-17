@@ -64,23 +64,39 @@ class Etat:
             return time.time() - self.last_ping
 
 
-def trouver_audio(root: Path):
-    audios = sorted(f for f in root.iterdir()
-                    if f.is_file() and f.suffix.lower() in AUDIO_EXTS)
-    return audios[0] if audios else None
-
-
 def trouver_srt(root: Path):
-    # priorite : 1_transcription/, repli : racine
-    sub = root / "1_transcription"
-    if sub.is_dir():
-        for f in sorted(sub.iterdir()):
-            if f.is_file() and f.suffix.lower() == ".srt":
-                return f
+    # Priorite a l'etat le PLUS AVANCE : 2_coupe (tague + coupe, vrais noms) ->
+    # 1_transcription (brut, etiquettes locales) -> racine. Ainsi, rouvrir le
+    # tagueur reprend la derniere version connue (correction de texte sans tout
+    # refaire), au lieu de repartir du transcript brut.
+    for sub in ("2_coupe", "1_transcription"):
+        d = root / sub
+        if d.is_dir():
+            for f in sorted(d.iterdir()):
+                if f.is_file() and f.suffix.lower() == ".srt":
+                    return f
     for f in sorted(root.iterdir()):
         if f.is_file() and f.suffix.lower() == ".srt":
             return f
     return None
+
+
+def trouver_audio(root: Path):
+    # L'audio doit correspondre au transcript servi : si on sert le .srt COUPE
+    # (2_coupe), on sert l'audio COUPE (memes timecodes) ; sinon l'audio brut.
+    srt = trouver_srt(root)
+    if srt is not None and srt.parent.name == "2_coupe":
+        d = srt.parent
+        for e in AUDIO_EXTS:
+            cand = d / (srt.stem + e)
+            if cand.is_file():
+                return cand
+        for f in sorted(d.iterdir()):
+            if f.is_file() and f.suffix.lower() in AUDIO_EXTS:
+                return f
+    audios = sorted(f for f in root.iterdir()
+                    if f.is_file() and f.suffix.lower() in AUDIO_EXTS)
+    return audios[0] if audios else None
 
 
 def trouver_memoire(depart: Path):
