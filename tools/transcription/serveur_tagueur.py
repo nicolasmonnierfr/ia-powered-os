@@ -33,7 +33,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac", ".ogg", ".aac", ".wma", ".opus"}
 MIME_AUDIO = {
@@ -223,6 +223,7 @@ def main():
     ap.add_argument("--tagger", required=True, help="Chemin de tagger.html.")
     ap.add_argument("--port", type=int, default=8765, help="Port (defaut 8765 ; repli auto si occupe).")
     ap.add_argument("--no-browser", action="store_true", help="Ne pas ouvrir le navigateur.")
+    ap.add_argument("--find", default="", help="Terme a rechercher : ouvre le tagueur sur ce passage (?find=).")
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
@@ -253,9 +254,10 @@ def main():
     print(f"[serveur] Tagueur servi sur   : {url}")
     print(f"[serveur] Ferme l'onglet pour arreter (auto apres {GRACE_SEC:.0f}s sans activite), ou Ctrl+C.")
 
+    open_url = url + ("?find=" + quote(args.find) if args.find else "")
     threading.Thread(target=watchdog, args=(etat, httpd), daemon=True).start()
     if not args.no_browser:
-        threading.Thread(target=lambda: (time.sleep(0.6), webbrowser.open(url)), daemon=True).start()
+        threading.Thread(target=lambda: (time.sleep(0.6), webbrowser.open(open_url)), daemon=True).start()
 
     try:
         httpd.serve_forever()

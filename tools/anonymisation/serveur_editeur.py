@@ -26,12 +26,16 @@ Routes :
                               ET estampille le .etat.json (validation.faite=true),
                               trace exploitee par l'orchestrateur pour l'anonym. auto.
     POST /api/ping         -> heartbeat
+    POST /api/ouvrir-tagueur -> relance le tagueur (serveur_tagueur.py) sur
+                              l'entretien, positionne sur le terme a corriger
+                              (?find=), pour editer le texte du transcript.
 """
 
 import argparse
 import json
 import mimetypes
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -227,7 +231,42 @@ def make_handler(etat: Etat):
                 return self._json(200, {"ok": True})
             if path == "/api/export":
                 return self._export()
+            if path == "/api/ouvrir-tagueur":
+                return self._ouvrir_tagueur()
             self._json(404, {"error": "not found"})
+
+        def _ouvrir_tagueur(self):
+            """Relance le tagueur sur l'entretien, positionne sur le terme a
+            corriger (saut par TEXTE -> robuste au decoupage). Le tagueur reste
+            la source de verite du texte ; apres correction + re-export, relancer
+            l'identification. Renvoie une commande de repli si le lancement echoue.
+            """
+            n = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(n) if n else b""
+            try:
+                payload = json.loads(raw.decode("utf-8")) if raw else {}
+            except (ValueError, UnicodeDecodeError):
+                payload = {}
+            texte = (payload.get("texte") or "").strip()
+            if not texte:
+                return self._json(400, {"error": "champ 'texte' attendu"})
+            repo = Path(__file__).resolve().parents[2]
+            serveur_tg = repo / "tools" / "transcription" / "serveur_tagueur.py"
+            tagger = repo / "tools" / "transcription" / "tagger.html"
+            entretien = etat.etat_path.parent.parent
+            cmd_aide = f'ia taguer -Find "{texte}"'
+            if not serveur_tg.is_file() or not tagger.is_file():
+                return self._json(500, {"error": "serveur_tagueur/tagger introuvable",
+                                        "cmd": cmd_aide})
+            try:
+                subprocess.Popen(
+                    [sys.executable, str(serveur_tg), "--root", str(entretien),
+                     "--tagger", str(tagger), "--find", texte],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    cwd=str(entretien))
+            except OSError as e:
+                return self._json(500, {"error": str(e), "cmd": cmd_aide})
+            return self._json(200, {"ok": True, "cmd": cmd_aide})
 
         def _export(self):
             n = int(self.headers.get("Content-Length", 0))

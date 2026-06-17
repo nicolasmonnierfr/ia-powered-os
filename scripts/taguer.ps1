@@ -18,7 +18,8 @@
 [CmdletBinding()]
 param(
     [int]$Port = 8765,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [string]$Find        # ouvre le tagueur PILE sur ce terme (saut + lecture)
 )
 
 . "$PSScriptRoot\_commun.ps1"
@@ -38,6 +39,7 @@ Write-Info "Le serveur s'arrete a la fermeture de l'onglet (ou Ctrl+C ici)."
 
 $pyArgs = @($serveur, "--root", $root, "--tagger", $tagger, "--port", $Port)
 if ($NoBrowser) { $pyArgs += "--no-browser" }
+if ($Find)      { $pyArgs += @("--find", $Find); Write-Info "Ouverture sur le terme : « $Find »" }
 
 # Log du serveur tagueur (sans toucher au statut 'coupe' : c'est couper.ps1 qui
 # finalise la coupe ; ici on trace juste la session de tagging).

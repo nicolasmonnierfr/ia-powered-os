@@ -985,9 +985,30 @@
       setDirStatus(`Entretien chargé (${a}, ${s})`, !!(man.audio && man.srt));
       if (!man.audio) alert("Aucun audio trouvé à la racine du dossier d'entretien.");
       if (!man.srt)  alert("Aucun .srt trouvé (ni dans 1_transcription\\, ni à la racine).");
+      applyFindFromURL();   // saut + lecture d'un terme passe en ?find= (depuis l'editeur d'alias)
     } catch (e) {
       setDirStatus("Erreur de chargement depuis le serveur : " + (e && e.message ? e.message : e), false);
     }
+  }
+
+  // Saut vers un terme passe dans l'URL (?find=...). Utilise par l'editeur
+  // d'alias pour rouvrir le tagueur PILE sur le passage a corriger. On cherche
+  // par TEXTE (et non par timecode) : robuste au decalage de timeline introduit
+  // par la coupe (le .etat.json peut venir du transcript coupe).
+  function applyFindFromURL() {
+    let q = "";
+    try { q = (new URLSearchParams(location.search).get("find") || "").trim(); } catch (e) { return; }
+    if (!q || !segments.length) return;
+    const low = q.toLowerCase();
+    const idx = segments.findIndex(s => (s.text || "").toLowerCase().includes(low));
+    if (idx < 0) { setDirStatus(`« ${q} » introuvable dans le transcript (deja corrige ?).`, false); return; }
+    select(idx, true, false);   // scrolle + joue le segment
+    const node = segList.querySelector(`.seg[data-i="${idx}"]`);
+    if (node) {
+      node.style.outline = "2px solid #e8a04e";
+      setTimeout(() => { node.style.outline = ""; }, 5000);
+    }
+    setDirStatus(`Passage trouve pour « ${q} » — double-clic sur le segment pour corriger le texte.`, true);
   }
 
   async function serveurExporter(files) {

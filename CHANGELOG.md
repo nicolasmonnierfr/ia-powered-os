@@ -9,6 +9,31 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.3.0] — 2026-06-17
+
+### Ajouté — réécoute audio + correction du texte pendant l'analyse (#6, #2, #16)
+- **Réécoute audio dans l'éditeur d'alias** : chaque entité a un bouton **▶** qui
+  rejoue le tronçon de l'occurrence (clic répété = occurrence suivante → navigation
+  entre extraits, #2). `detecter.py` capture les timecodes (champ `positions`) ;
+  `serveur_editeur.py` sert l'audio (`/api/audio`, **support Range/seek**, #16) en
+  alignant l'audio coupé (`2_coupe`) ou brut (racine) selon `transcript_dir`.
+- **Correction « dans la foulée »** : bouton **✎** par occurrence qui rouvre le
+  **tagueur** (source de vérité du texte) PILE sur le passage, par recherche de
+  **texte** (robuste au décalage de timeline dû à la coupe). `serveur_tagueur.py`
+  et `taguer.ps1` acceptent `--find`/`-Find` ; `serveur_editeur.py` lance le
+  tagueur via `/api/ouvrir-tagueur` (repli affiché : `ia taguer -Find "…"`).
+
+  Boucle : ✎ → corriger dans le tagueur → ré-exporter (`2_coupe`) →
+  `ia identifier` → `ia analyser`.
+
+Outils : `detecter.py`, `serveur_editeur.py`, `editeur_alias.html`,
+`serveur_tagueur.py`, `taguer.ps1`, `tagger.html`.
+
+> Phase 2 à suivre : noms de locuteurs obligatoires + persistance via la mémoire
+> client (cohérence d'anonymisation entre entretiens).
+
+---
+
 ## [1.2.0] — 2026-06-17
 
 ### Ajouté / Modifié
@@ -171,6 +196,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.3.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.3.0
 [1.2.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.2.0
 [1.1.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.0.0
