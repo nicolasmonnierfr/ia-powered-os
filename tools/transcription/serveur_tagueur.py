@@ -64,6 +64,14 @@ class Etat:
             return time.time() - self.last_ping
 
 
+def audio_reference(root: Path):
+    """Audio ORIGINAL a la racine de l'entretien = la REFERENCE du workflow
+    (nom stable, meme quand on sert l'audio coupe de 2_coupe)."""
+    audios = sorted(f for f in root.iterdir()
+                    if f.is_file() and f.suffix.lower() in AUDIO_EXTS)
+    return audios[0].name if audios else None
+
+
 def trouver_srt(root: Path):
     # Priorite a l'etat le PLUS AVANCE : 2_coupe (tague + coupe, vrais noms) ->
     # 1_transcription (brut, etiquettes locales) -> racine. Ainsi, rouvrir le
@@ -179,6 +187,7 @@ def make_handler(etat: Etat):
                 "srt": (srt.name if srt else None),
                 "srt_dir": (str(srt.parent.relative_to(etat.root)) if srt else None),
                 "locuteurs_connus": noms_locuteurs_connus(etat.root),
+                "reference": audio_reference(etat.root),
             })
 
         def _audio(self):

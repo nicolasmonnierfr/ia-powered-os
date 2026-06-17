@@ -439,7 +439,12 @@
             body: JSON.stringify({ texte: v.texte }),
           });
           res = await r.json();
-          if (r.ok && res && res.ok) return;   // tagueur ouvert dans un onglet
+          if (r.ok && res && res.ok) {
+            // L'EDITEUR ouvre l'onglet (vrai navigateur) -> chargement fiable en
+            // mode serveur (export direct dans 2_coupe, plus de download).
+            if (res.url) window.open(res.url, "_blank");
+            return;
+          }
         } catch (e) { /* repli ci-dessous */ }
         alert("Tagueur non ouvert automatiquement.\nLance-le a la main :\n  "
               + ((res && res.cmd) || ('ia taguer -Find "' + v.texte + '"')));

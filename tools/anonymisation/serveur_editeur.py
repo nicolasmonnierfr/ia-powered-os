@@ -35,6 +35,7 @@ import argparse
 import json
 import mimetypes
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -43,13 +44,20 @@ import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 GRACE_SEC = 15.0
 CHECK_EVERY = 3.0
 
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac",
               ".ogg", ".aac", ".wma", ".opus"}
+# Type MIME explicite : mimetypes.guess_type renvoie souvent octet-stream pour
+# .m4a -> le <audio> du navigateur refuse de decoder (bouton ▶ sans effet).
+MIME_AUDIO = {
+    ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska", ".webm": "audio/webm", ".flac": "audio/flac",
+    ".ogg": "audio/ogg", ".aac": "audio/aac", ".wma": "audio/x-ms-wma", ".opus": "audio/opus",
+}
 
 
 def _trouver_audio(etat_path: Path, etat_data: dict):
@@ -81,6 +89,16 @@ def _trouver_audio(etat_path: Path, etat_data: dict):
         cands = audios_dans(d)
         if cands:
             return cands[0]
+    return None
+
+
+def _audio_reference(entretien: Path):
+    """Audio ORIGINAL a la racine de l'entretien = la REFERENCE du workflow."""
+    if not entretien.is_dir():
+        return None
+    for f in sorted(entretien.iterdir()):
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTS:
+            return f.name
     return None
 
 
@@ -173,6 +191,7 @@ def make_handler(etat: Etat):
                     "memoire_path": str(etat.memoire_path),
                     "audio": bool(ap),
                     "audio_name": ap.name if ap else None,
+                    "reference": _audio_reference(etat.etat_path.parent.parent),
                 })
             if path == "/api/audio":
                 return self._serve_audio()
@@ -191,7 +210,8 @@ def make_handler(etat: Etat):
             if not ap or not ap.is_file():
                 return self._json(404, {"error": "audio introuvable"})
             size = ap.stat().st_size
-            ctype = mimetypes.guess_type(str(ap))[0] or "application/octet-stream"
+            ctype = (MIME_AUDIO.get(ap.suffix.lower())
+                     or mimetypes.guess_type(str(ap))[0] or "application/octet-stream")
             rng = self.headers.get("Range")
             # Requete partielle (seek) -> 206. Lecture du seul tronçon demande.
             if rng:
@@ -258,15 +278,28 @@ def make_handler(etat: Etat):
             if not serveur_tg.is_file() or not tagger.is_file():
                 return self._json(500, {"error": "serveur_tagueur/tagger introuvable",
                                         "cmd": cmd_aide})
+            # On choisit un port LIBRE et on le passe au serveur_tagueur, lance en
+            # --no-browser : c'est l'EDITEUR (vrai navigateur) qui ouvrira l'onglet
+            # via window.open(url). Plus fiable que webbrowser depuis un sous-process
+            # detache (qui pouvait ne pas charger en mode serveur -> export en
+            # download au lieu d'ecrire dans 2_coupe).
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+                s.close()
+            except OSError as e:
+                return self._json(500, {"error": str(e), "cmd": cmd_aide})
             try:
                 subprocess.Popen(
                     [sys.executable, str(serveur_tg), "--root", str(entretien),
-                     "--tagger", str(tagger), "--find", texte],
+                     "--tagger", str(tagger), "--port", str(port), "--no-browser"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                     cwd=str(entretien))
             except OSError as e:
                 return self._json(500, {"error": str(e), "cmd": cmd_aide})
-            return self._json(200, {"ok": True, "cmd": cmd_aide})
+            url = f"http://127.0.0.1:{port}/?find={quote(texte)}"
+            return self._json(200, {"ok": True, "url": url, "cmd": cmd_aide})
 
         def _export(self):
             n = int(self.headers.get("Content-Length", 0))

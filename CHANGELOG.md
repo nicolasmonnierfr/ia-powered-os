@@ -14,6 +14,14 @@ parenthèses) et retiré du backlog.
 Retours de test (tagueur). À consolider en version taguée une fois la salve finie.
 
 ### Corrigé
+- **Éditeur d'alias — bouton ▶ sans effet** : `serveur_editeur` servait l'audio
+  avec un type MIME deviné (souvent `octet-stream` pour `.m4a`) → le `<audio>` ne
+  décodait pas. Table MIME explicite (comme le tagueur).
+- **Tagueur ouvert depuis l'éditeur (✎) — export en *download*** au lieu d'écrire
+  dans `2_coupe` : c'est désormais l'**éditeur** qui ouvre l'onglet du tagueur
+  (`window.open` vers un port libre dédié), garantissant le mode serveur (export
+  direct dans `2_coupe`/`1_transcription`). Avant, `serveur_tagueur` lancé en
+  sous-processus ouvrait lui-même le navigateur (peu fiable en détaché).
 - **Bouton « Renommer les locuteurs »** : ne faisait plus rien tant qu'aucun
   locuteur n'était assigné (régression Phase 2 — il ne traitait que les locuteurs
   déjà *utilisés*). Il renomme de nouveau **tous** les locuteurs (`nameAllSpeakers`).
