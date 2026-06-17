@@ -21,6 +21,7 @@ Routes :
     GET  /api/manifest     -> {etat: bool, memoire_existe: bool, memoire_path}
     GET  /api/etat         -> contenu du .etat.json
     GET  /api/memoire      -> contenu du memoire_client.json existant (ou 404)
+    GET  /api/audio        -> audio de l'entretien (support Range/206 pour le seek)
     POST /api/export       -> ecrit le memoire_client.json au chemin du perimetre
                               ET estampille le .etat.json (validation.faite=true),
                               trace exploitee par l'orchestrateur pour l'anonym. auto.
@@ -29,6 +30,8 @@ Routes :
 
 import argparse
 import json
+import mimetypes
+import re
 import sys
 import threading
 import time
@@ -41,6 +44,41 @@ from urllib.parse import urlparse
 GRACE_SEC = 15.0
 CHECK_EVERY = 3.0
 
+AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac",
+              ".ogg", ".aac", ".wma", ".opus"}
+
+
+def _trouver_audio(etat_path: Path, etat_data: dict):
+    """Localise l'audio dont les timecodes des `positions` du .etat.json sont
+    relatifs. Le .etat.json vit dans <entretien>/3_anonymisation/ ; le champ
+    `transcript_dir` indique d'ou vient le transcript :
+      - "2_coupe"         -> audio COUPE (timecodes relatifs au montage) ;
+      - "1_transcription" -> audio BRUT (a la racine de l'entretien).
+    Retourne un Path ou None.
+    """
+    entretien = etat_path.parent.parent
+    tdir = (etat_data or {}).get("transcript_dir") or ""
+    stem = Path((etat_data or {}).get("transcript") or "").stem
+
+    def audios_dans(d):
+        if not d.is_dir():
+            return []
+        prio = [d / f"{stem}{e}" for e in AUDIO_EXTS]
+        prio = [p for p in prio if p.is_file()]
+        reste = sorted(p for p in d.iterdir()
+                       if p.is_file() and p.suffix.lower() in AUDIO_EXTS)
+        return prio + [p for p in reste if p not in prio]
+
+    if tdir == "2_coupe":
+        ordre = [entretien / "2_coupe", entretien]
+    else:
+        ordre = [entretien, entretien / "2_coupe"]
+    for d in ordre:
+        cands = audios_dans(d)
+        if cands:
+            return cands[0]
+    return None
+
 
 class Etat:
     def __init__(self, etat_path: Path, memoire_path: Path, editeur: Path):
@@ -49,6 +87,21 @@ class Etat:
         self.editeur = editeur
         self.last_ping = time.time()
         self.lock = threading.Lock()
+        self._audio = False   # sentinelle "non resolu" (sinon None=absent / Path)
+
+    def audio_path(self):
+        """Localise (et met en cache) l'audio associe au .etat.json."""
+        with self.lock:
+            if self._audio is not False:
+                return self._audio
+        try:
+            data = json.loads(self.etat_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        ap = _trouver_audio(self.etat_path, data)
+        with self.lock:
+            self._audio = ap
+        return ap
 
     def touch(self):
         with self.lock:
@@ -108,12 +161,17 @@ def make_handler(etat: Etat):
             if path in ("/", "/index.html"):
                 return self._send(200, etat.editeur.read_bytes(), "text/html; charset=utf-8")
             if path == "/api/manifest":
+                ap = etat.audio_path()
                 return self._json(200, {
                     "etat": etat.etat_path.is_file(),
                     "etat_name": etat.etat_path.name,
                     "memoire_existe": etat.memoire_path.is_file(),
                     "memoire_path": str(etat.memoire_path),
+                    "audio": bool(ap),
+                    "audio_name": ap.name if ap else None,
                 })
+            if path == "/api/audio":
+                return self._serve_audio()
             if path == "/api/etat":
                 if not etat.etat_path.is_file():
                     return self._json(404, {"error": "etat.json absent"})
@@ -123,6 +181,44 @@ def make_handler(etat: Etat):
                     return self._json(404, {"error": "memoire_client.json absent"})
                 return self._send(200, etat.memoire_path.read_bytes(), "application/json; charset=utf-8")
             self._json(404, {"error": "not found"})
+
+        def _serve_audio(self):
+            ap = etat.audio_path()
+            if not ap or not ap.is_file():
+                return self._json(404, {"error": "audio introuvable"})
+            size = ap.stat().st_size
+            ctype = mimetypes.guess_type(str(ap))[0] or "application/octet-stream"
+            rng = self.headers.get("Range")
+            # Requete partielle (seek) -> 206. Lecture du seul tronçon demande.
+            if rng:
+                m = re.match(r"bytes=(\d*)-(\d*)", rng.strip())
+                if m and (m.group(1) or m.group(2)):
+                    s = int(m.group(1)) if m.group(1) else 0
+                    e = int(m.group(2)) if m.group(2) else size - 1
+                    s = max(0, s); e = min(e, size - 1)
+                    if s > e:
+                        s = 0
+                    length = e - s + 1
+                    with open(ap, "rb") as f:
+                        f.seek(s)
+                        data = f.read(length)
+                    self.send_response(206)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Range", f"bytes {s}-{e}/{size}")
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Content-Length", str(length))
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    return self.wfile.write(data)
+            # Réponse complète.
+            data = ap.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
 
         def do_POST(self):
             path = urlparse(self.path).path

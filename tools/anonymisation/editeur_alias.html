@@ -144,6 +144,30 @@
   const MODE_SERVEUR = /^https?:$/.test(location.protocol) &&
                        /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
 
+  // ---- Réécoute audio (mode serveur) : /api/audio sert l'audio (Range/seek) ----
+  // Les `positions` des variantes portent les timecodes (start/end) de chaque
+  // occurrence (cf. detecter.py). On rejoue le tronçon correspondant pour lever
+  // un doute sur une entité ou reperer une faute de transcription.
+  let audioEl = null, audioAvailable = false, snipTimer = null;
+  function ensureAudio() {
+    if (!audioEl) { audioEl = new Audio("/api/audio"); audioEl.preload = "none"; }
+    return audioEl;
+  }
+  function playSnippet(start, end) {
+    if (!audioAvailable || start == null) return;
+    const a = ensureAudio();
+    if (snipTimer) { clearTimeout(snipTimer); snipTimer = null; }
+    const begin = Math.max(0, start - 0.3);
+    const stop = (end != null && end > start) ? end + 0.4 : start + 4;
+    const go = () => {
+      try { a.currentTime = begin; } catch (e) {}
+      a.play().catch(() => {});
+      snipTimer = setTimeout(() => a.pause(), Math.max(500, (stop - begin) * 1000));
+    };
+    if (a.readyState >= 1) go();
+    else { a.addEventListener("loadedmetadata", go, { once: true }); a.load(); }
+  }
+
   function nextId() { return "g" + (uid++); }
 
   // ---- Chargement de l'état de détection ----
@@ -171,7 +195,8 @@
       }
       byPseudo[key].variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
-        source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || ""
+        source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
+        positions: c.positions || []
       });
     }
     groups = Object.values(byPseudo);
@@ -198,7 +223,8 @@
       groups.push({
         id: nextId(), pseudo: e.pseudo, type: e.type || typeFromPseudo(e.pseudo),
         variants: (e.variantes || []).map(t => ({
-          texte: t, occurrences: 0, score: 1, source: e.source || "alias", exemple: ""
+          texte: t, occurrences: 0, score: 1, source: e.source || "alias", exemple: "",
+          positions: []
         }))
       });
     }
@@ -230,7 +256,8 @@
       }
       g.variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
-        source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || ""
+        source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
+        positions: c.positions || []
       });
       connues.add(low);
     }
@@ -339,6 +366,24 @@
     const ex = document.createElement("span"); ex.className = "ex"; ex.textContent = v.exemple || "";
 
     const va = document.createElement("div"); va.className = "var-actions";
+    // ▶ Réécoute : présent si l'audio est dispo ET que la variante a des timecodes.
+    // Clic répété -> occurrence suivante (navigation entre extraits, backlog #2).
+    if (audioAvailable && v.positions && v.positions.length) {
+      if (typeof v._pi !== "number") v._pi = 0;
+      const playBtn = document.createElement("button");
+      playBtn.className = "btn ghost";
+      const lbl = () => { playBtn.textContent = v.positions.length > 1
+        ? `▶ ${(v._pi % v.positions.length) + 1}/${v.positions.length}` : "▶"; };
+      lbl();
+      playBtn.title = "Écouter cette occurrence (clic répété = occurrence suivante)";
+      playBtn.addEventListener("click", () => {
+        const pos = v.positions[v._pi % v.positions.length];
+        v._pi = (v._pi + 1) % v.positions.length;
+        lbl();
+        playSnippet(pos.start, pos.end);
+      });
+      va.append(playBtn);
+    }
     const moveBtn = document.createElement("button");
     moveBtn.className = "btn ghost"; moveBtn.textContent = "Fusionner vers…";
     moveBtn.addEventListener("click", () => promptMerge(group, v));
@@ -576,6 +621,7 @@
     });
     try {
       const man = await (await fetch("/api/manifest")).json();
+      audioAvailable = !!man.audio;   // active les boutons ▶ de réécoute
       // Refonte #14/#17 : si une mémoire client existe au périmètre, on la
       // charge ; puis on FUSIONNE les nouvelles détections de l'état (sans
       // écraser les regroupements existants). Sinon on initialise depuis l'état.
