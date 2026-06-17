@@ -17,6 +17,10 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
 - **Bouton « Renommer les locuteurs »** : ne faisait plus rien tant qu'aucun
   locuteur n'était assigné (régression Phase 2 — il ne traitait que les locuteurs
   déjà *utilisés*). Il renomme de nouveau **tous** les locuteurs (`nameAllSpeakers`).
+- **Badge de prise de parole (« ▸ Nom ») non mis à jour après réaffectation** :
+  on pouvait avoir un changement de locuteur sans badge. `turnStart` est désormais
+  **recalculé** depuis la séquence des locuteurs après chaque édition (affecter,
+  prise de parole, effacer, scinder, fusionner). `tagger.html`.
 
 ### Ajouté
 - **Tagueur — Fusionner** : bouton « Fusionner » (touche **F**) qui réunit les

@@ -691,47 +691,48 @@
   segList.addEventListener("scroll", updateMinimapViewport);
   window.addEventListener("resize", () => { updateMinimapViewport(); });
 
+  // Recalcule l'etiquette de prise de parole (turnStart) de TOUS les segments :
+  // un segment commence une nouvelle prise des que son locuteur DIFFERE du
+  // precedent (badge "▸ Nom"). turnStart est purement VISUEL (l'export se base
+  // sur le changement de locuteur). A appeler apres toute modif d'affectation
+  // pour que les badges restent coherents (corrige : changement de locuteur sans
+  // badge apres reaffectation).
+  function recomputeTurns() {
+    let prev = null;
+    for (const seg of segments) {
+      if (seg.speaker === null) { seg.turnStart = false; prev = null; }
+      else { seg.turnStart = (seg.speaker !== prev); prev = seg.speaker; }
+    }
+  }
+
   function tagSegment(i, sp) {
     const r = selRange();
     if (!r) return;
-    if (r.lo === r.hi) {
-      // un seul segment
-      segments[i].speaker = sp; segments[i].turnStart = false;
-    } else {
-      // plage : meme locuteur, turnStart sur le 1er seulement
-      for (let j = r.lo; j <= r.hi; j++) {
-        segments[j].speaker = sp;
-        segments[j].turnStart = (j === r.lo);
-      }
-    }
+    for (let j = r.lo; j <= r.hi; j++) segments[j].speaker = sp;
+    recomputeTurns();
     refreshClasses();
   }
   function tagTurn(i, sp) {
     const r = selRange();
     if (!r) return;
     if (r.lo !== r.hi) {
-      // plage explicite : on tague la plage comme une prise de parole
-      for (let j = r.lo; j <= r.hi; j++) {
+      for (let j = r.lo; j <= r.hi; j++) segments[j].speaker = sp;
+    } else {
+      // ce segment + suivants jusqu'au prochain changement de locuteur existant
+      segments[i].speaker = sp;
+      for (let j = i + 1; j < segments.length; j++) {
+        if (segments[j].turnStart) break;
         segments[j].speaker = sp;
-        segments[j].turnStart = (j === r.lo);
       }
-      refreshClasses();
-      return;
     }
-    // comportement d'origine : ce segment + suivants jusqu'au prochain turnStart
-    segments[i].speaker = sp; segments[i].turnStart = true;
-    for (let j = i + 1; j < segments.length; j++) {
-      if (segments[j].turnStart) break;
-      segments[j].speaker = sp;
-    }
+    recomputeTurns();
     refreshClasses();
   }
   function clearSegment(i) {
     const r = selRange();
     if (!r) return;
-    for (let j = r.lo; j <= r.hi; j++) {
-      segments[j].speaker = null; segments[j].turnStart = false;
-    }
+    for (let j = r.lo; j <= r.hi; j++) segments[j].speaker = null;
+    recomputeTurns();
     refreshClasses();
   }
   function toggleCut() {
@@ -1005,6 +1006,7 @@
     const a = { ...seg, end: t, text: txt.slice(0, pos).trim(), edited: true };
     const b = { ...seg, start: t, text: txt.slice(pos).trim(), turnStart: false, edited: true };
     segments.splice(i, 1, a, b);
+    recomputeTurns();
     render();                          // les index changent -> rendu complet
     select(i + 1, false, false);       // selectionne la 2e moitie (a re-taguer)
   }
@@ -1030,6 +1032,7 @@
     };
     segments.splice(r.lo, segs.length, fusion);
     selAnchor = r.lo;
+    recomputeTurns();
     render();
     select(r.lo, false, false);
   }
