@@ -613,36 +613,30 @@
 
   function renderMinimap() {
     if (segments.length === 0) { mmColors.innerHTML = ""; mmCtrl.innerHTML = ""; return; }
-    const { t0, span } = timelineBounds();
-
-    // Zone couleurs : un bloc par segment tagué ; les non-taggés laissent voir le fond (--bg)
-    let colors = "";
-    for (const seg of segments) {
-      const top = ((seg.start - t0) / span) * 100;
-      const h = Math.max(((seg.end - seg.start) / span) * 100, 0.3);
+    // La minimap est calée sur la LISTE (positions DOM réelles des lignes), pas
+    // sur la durée audio : ainsi chaque marque (non-diarisé, coupe) est PILE en
+    // face de son segment, et cohérente avec le viewport (qui suit le scroll).
+    const nodes = segList.querySelectorAll(".seg");
+    const totalH = segList.scrollHeight || 1;
+    let colors = "", ctrl = "";
+    segments.forEach((seg, i) => {
+      const node = nodes[i];
+      if (!node) return;
+      const top = (node.offsetTop / totalH) * 100;
+      const h = Math.max((node.offsetHeight / totalH) * 100, 0.3);
       const untag = (seg.speaker === null || seg.speaker >= nSpeakers);
       if (!untag) {
         const cutCls = seg.cut ? " is-cut" : "";
         colors += `<div class="mm-band${cutCls}" style="top:${top}%;height:${h}%;background:${locVar(seg.speaker)}"></div>`;
       }
-      // marque de coupe (barre rouge a gauche), visible meme si le segment n'est pas tagué
       if (seg.cut) {
-        const hc = Math.max(((seg.end - seg.start) / span) * 100, 0.5);
-        colors += `<div class="mm-cut" style="top:${top}%;height:${hc}%"></div>`;
+        colors += `<div class="mm-cut" style="top:${top}%;height:${Math.max(h, 0.5)}%"></div>`;
       }
-    }
-    mmColors.innerHTML = colors;
-
-    // Zone controle : traits pour les non-taggés + curseur + viewport
-    let ctrl = "";
-    for (const seg of segments) {
-      const untag = (seg.speaker === null || seg.speaker >= nSpeakers);
       if (untag) {
-        const top = ((seg.start - t0) / span) * 100;
-        const h = Math.max(((seg.end - seg.start) / span) * 100, 0.8); // plancher plus haut : un trait toujours visible
-        ctrl += `<div class="mm-untag" style="top:${top}%;height:${h}%"></div>`;
+        ctrl += `<div class="mm-untag" style="top:${top}%;height:${Math.max(h, 0.8)}%"></div>`;
       }
-    }
+    });
+    mmColors.innerHTML = colors;
     ctrl += `<div class="mm-view" id="mmView" style="display:none"></div>`;
     ctrl += `<div class="mm-play-tri" id="mmPlay" style="display:none"></div>`;
     mmCtrl.innerHTML = ctrl;
@@ -654,13 +648,19 @@
   function updateMinimapPlayhead() {
     const el = document.getElementById("mmPlay");
     if (!el || segments.length === 0) return;
-    const { t0, span } = timelineBounds();
     const t = player.currentTime;
     if (isNaN(t)) { el.style.display = "none"; return; }
-    const pct = ((t - t0) / span) * 100;
-    if (pct < 0 || pct > 100) { el.style.display = "none"; return; }
+    // Position du segment EN COURS de lecture (calage sur les lignes, cf. minimap).
+    let cur = -1;
+    for (let i = 0; i < segments.length; i++) {
+      if (t >= segments[i].start && t < segments[i].end) { cur = i; break; }
+      if (t < segments[i].start) break;
+    }
+    if (cur < 0) { el.style.display = "none"; return; }
+    const node = segList.querySelector(`.seg[data-i="${cur}"]`);
+    if (!node) { el.style.display = "none"; return; }
     el.style.display = "block";
-    el.style.top = pct + "%";
+    el.style.top = (node.offsetTop / (segList.scrollHeight || 1) * 100) + "%";
   }
 
   function updateMinimapViewport() {
@@ -678,13 +678,11 @@
     if (segments.length === 0) return;
     const rect = minimap.getBoundingClientRect();
     const frac = (e.clientY - rect.top) / rect.height;
-    const { t0, span } = timelineBounds();
-    const targetT = t0 + frac * span;
+    const targetY = frac * (segList.scrollHeight || 1);   // position dans la LISTE
+    const nodes = segList.querySelectorAll(".seg");
     let idx = 0;
-    for (let i = 0; i < segments.length; i++) {
-      if (segments[i].start <= targetT) idx = i; else break;
-    }
-    select(idx, true, false);
+    for (let i = 0; i < nodes.length; i++) { if (nodes[i].offsetTop <= targetY) idx = i; else break; }
+    select(idx, false, false);   // navigue (scrolle) sans lancer la lecture (#3)
   }
   mmColors.addEventListener("click", minimapClick);
   mmCtrl.addEventListener("click", minimapClick);
@@ -712,6 +710,7 @@
     for (let j = r.lo; j <= r.hi; j++) segments[j].speaker = sp;
     recomputeTurns();
     refreshClasses();
+    updateStats();   // maj minimap (marques non-diarisés) + compteurs en direct
   }
   function tagTurn(i, sp) {
     const r = selRange();
@@ -728,6 +727,7 @@
     }
     recomputeTurns();
     refreshClasses();
+    updateStats();   // maj minimap (marques non-diarisés) + compteurs en direct
   }
   function clearSegment(i) {
     const r = selRange();
@@ -735,6 +735,7 @@
     for (let j = r.lo; j <= r.hi; j++) segments[j].speaker = null;
     recomputeTurns();
     refreshClasses();
+    updateStats();   // maj minimap (marques non-diarisés) + compteurs en direct
   }
   function toggleCut() {
     const r = selRange();
