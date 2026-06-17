@@ -27,6 +27,7 @@ Routes :
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -194,12 +195,34 @@ def make_handler(etat: Etat):
             audio = trouver_audio(etat.root)
             if not audio:
                 return self._json(404, {"error": "aucun audio a la racine"})
+            ctype = MIME_AUDIO.get(audio.suffix.lower(), "application/octet-stream")
+            size = audio.stat().st_size
+            rng = self.headers.get("Range")
+            # Requete partielle (seek) -> 206 Partial Content : lecture du seul
+            # troncon demande (#16, comme serveur_editeur). Ameliore le seek sur
+            # gros fichiers (le navigateur n'a plus a charger tout l'audio).
+            if rng:
+                m = re.match(r"bytes=(\d*)-(\d*)", rng.strip())
+                if m and (m.group(1) or m.group(2)):
+                    s = int(m.group(1)) if m.group(1) else 0
+                    e = int(m.group(2)) if m.group(2) else size - 1
+                    s = max(0, s); e = min(e, size - 1)
+                    if s > e:
+                        s = 0
+                    try:
+                        with open(audio, "rb") as f:
+                            f.seek(s)
+                            data = f.read(e - s + 1)
+                    except OSError as ex:
+                        return self._json(500, {"error": str(ex)})
+                    return self._send(206, data, ctype, extra={
+                        "Content-Range": f"bytes {s}-{e}/{size}",
+                        "Accept-Ranges": "bytes"})
             try:
                 data = audio.read_bytes()
             except OSError as e:
                 return self._json(500, {"error": str(e)})
-            ctype = MIME_AUDIO.get(audio.suffix.lower(), "application/octet-stream")
-            self._send(200, data, ctype, extra={"Accept-Ranges": "none"})
+            self._send(200, data, ctype, extra={"Accept-Ranges": "bytes"})
 
         def _srt(self):
             srt = trouver_srt(etat.root)

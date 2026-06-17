@@ -9,6 +9,22 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.8.0] — 2026-06-17
+
+### Ajouté
+- **#10 — Éditeur d'alias : vue liste des occurrences** : un bouton **📃 N** par
+  terme (dès 2 occurrences) ouvre la liste complète de ses occurrences localisées
+  (extrait **surligné** + **▶** écouter + **✎** corriger dans le tagueur). Au-delà
+  de la limite de capture (60), le surplus est signalé. Remplace le simple cyclage
+  du bouton ▶.
+
+### Modifié
+- **#16 — `serveur_tagueur.py` : requêtes Range (206 Partial Content)** : l'audio
+  du tagueur est servi par tronçons (`Accept-Ranges: bytes`) → *seek* fluide sur
+  gros fichiers, comme le serveur de l'éditeur. (Auparavant `Accept-Ranges: none`.)
+
+---
+
 ## [1.7.0] — 2026-06-17
 
 Salve de retours de test : refonte UX du tagueur (scinder/fusionner, navigation,
@@ -378,6 +394,7 @@ Rétrocompatibilité : `--alias`/`--table` encore acceptés (migration à la vol
   de transcription, sync, cycle install/désinstall de la tâche, transcriptions
   complètes (Nicolas, Cedric), correctif accents.
 
+[1.8.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.8.0
 [1.7.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.7.0
 [1.6.1]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.1
 [1.6.0]: https://github.com/nicolasmonnierfr/ia-powered-os/releases/tag/v1.6.0

@@ -93,6 +93,12 @@
   .merge-item b { white-space: nowrap; }
   .merge-vars { color: var(--ink-dim); font-size: 12px; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; }
+  /* #10 : liste des occurrences */
+  .occ-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px;
+    border-bottom: 1px solid var(--line); }
+  .occ-ex { flex: 1 1 auto; font-size: 12px; color: var(--ink-dim); font-style: italic; }
+  .occ-ex mark { background: var(--t-email); color: #14161a; padding: 0 2px;
+    border-radius: 3px; font-style: normal; font-weight: 600; }
   .src { font-size: 10px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-dim); }
   .var-actions { display: flex; gap: 5px; margin-left: auto; }
   .var-actions .btn { padding: 3px 8px; font-size: 11px; }
@@ -452,6 +458,14 @@
       });
       va.append(playBtn);
     }
+    // #10 : voir TOUTES les occurrences (liste) dès qu'il y en a plusieurs.
+    if (v.positions && v.positions.length > 1) {
+      const listBtn = document.createElement("button");
+      listBtn.className = "btn ghost"; listBtn.textContent = `📃 ${v.positions.length}`;
+      listBtn.title = "Voir toutes les occurrences (contexte + écoute)";
+      listBtn.addEventListener("click", () => openOccurrences(v));
+      va.append(listBtn);
+    }
     // ✎ Corriger : rouvre le tagueur (source de verite du texte) sur ce terme,
     // pour corriger une faute de transcription. Apres correction + re-export,
     // relancer 'ia identifier' puis 'ia analyser'. (mode serveur uniquement)
@@ -459,24 +473,7 @@
       const fixBtn = document.createElement("button");
       fixBtn.className = "btn ghost"; fixBtn.textContent = "✎ corriger";
       fixBtn.title = "Rouvrir le tagueur sur ce terme pour corriger la transcription";
-      fixBtn.addEventListener("click", async () => {
-        let res = null;
-        try {
-          const r = await fetch("/api/ouvrir-tagueur", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ texte: v.texte }),
-          });
-          res = await r.json();
-          if (r.ok && res && res.ok) {
-            // L'EDITEUR ouvre l'onglet (vrai navigateur) -> chargement fiable en
-            // mode serveur (export direct dans 2_coupe, plus de download).
-            if (res.url) window.open(res.url, "_blank");
-            return;
-          }
-        } catch (e) { /* repli ci-dessous */ }
-        alert("Tagueur non ouvert automatiquement.\nLance-le a la main :\n  "
-              + ((res && res.cmd) || ('ia taguer -Find "' + v.texte + '"')));
-      });
+      fixBtn.addEventListener("click", () => ouvrirTagueur(v.texte));
       va.append(fixBtn);
     }
     const moveBtn = document.createElement("button");
@@ -584,6 +581,66 @@
 
   function escapeHtml(s) {
     return (s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+
+  // Rouvre le tagueur (mode serveur) sur un terme à corriger : c'est l'ÉDITEUR
+  // qui ouvre l'onglet (chargement fiable en mode serveur -> export dans 2_coupe).
+  async function ouvrirTagueur(texte) {
+    let res = null;
+    try {
+      const r = await fetch("/api/ouvrir-tagueur", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texte }),
+      });
+      res = await r.json();
+      if (r.ok && res && res.ok) { if (res.url) window.open(res.url, "_blank"); return; }
+    } catch (e) { /* repli ci-dessous */ }
+    alert("Tagueur non ouvert automatiquement.\nLance-le a la main :\n  "
+          + ((res && res.cmd) || ('ia taguer -Find "' + texte + '"')));
+  }
+
+  // #10 : liste TOUTES les occurrences localisées d'un terme (extrait surligné +
+  // ▶ écouter + ✎ corriger), pour lever une ambiguïté / repérer une faute.
+  function openOccurrences(v) {
+    const pos = v.positions || [];
+    if (!pos.length) { alert("Aucune occurrence localisée pour ce terme."); return; }
+    const ov = document.createElement("div"); ov.className = "merge-ov";
+    const box = document.createElement("div"); box.className = "merge-box";
+    const h = document.createElement("div"); h.className = "merge-title";
+    h.textContent = `Occurrences de « ${v.texte} » (${pos.length})`;
+    box.appendChild(h);
+    pos.forEach(p => {
+      const row = document.createElement("div"); row.className = "occ-row";
+      const play = document.createElement("button"); play.className = "btn ghost"; play.textContent = "▶";
+      play.title = "Écouter"; play.disabled = !audioAvailable;
+      play.addEventListener("click", () => playSnippet(p.start, p.end));
+      const ex = document.createElement("span"); ex.className = "occ-ex";
+      setExcerpt(ex, p.extrait || "", v.texte);
+      row.append(play, ex);
+      if (MODE_SERVEUR) {
+        const fix = document.createElement("button"); fix.className = "btn ghost"; fix.textContent = "✎";
+        fix.title = "Corriger dans le tagueur";
+        fix.addEventListener("click", () => ouvrirTagueur(v.texte));
+        row.append(fix);
+      }
+      box.appendChild(row);
+    });
+    if ((v.occurrences || 0) > pos.length) {
+      const n = document.createElement("div");
+      n.style.cssText = "font-size:11px;color:var(--ink-faint);margin-top:4px;";
+      n.textContent = `+${v.occurrences - pos.length} occurrence(s) au-delà de la limite (non listées).`;
+      box.appendChild(n);
+    }
+    const close = document.createElement("button");
+    close.className = "btn ghost"; close.style.marginTop = "6px"; close.textContent = "Fermer";
+    close.addEventListener("click", () => ov.remove());
+    box.appendChild(close);
+    ov.appendChild(box);
+    ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+    document.addEventListener("keydown", function esc(e) {
+      if (e.key === "Escape") { ov.remove(); document.removeEventListener("keydown", esc); }
+    });
+    document.body.appendChild(ov);
   }
 
   // Sélecteur de fusion CLIQUABLE (remplace l'ancien prompt numéroté) : liste les
