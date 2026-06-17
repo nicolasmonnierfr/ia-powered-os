@@ -1086,13 +1086,34 @@
 
   // Charge un transcript .srt depuis son TEXTE (reutilise par l'input file et
   // par l'ouverture de dossier).
+  // Estime le nombre de locuteurs a partir des etiquettes locales
+  // T<troncon>-<lettre> : c'est le MAX de lettres distinctes dans un meme
+  // troncon (borne basse fiable : on ne peut pas avoir moins de locuteurs
+  // globaux que le plus grand nombre de voix simultanees d'un troncon).
+  function speakersFromLocalLabels(labels) {
+    const perChunk = {};
+    for (const l of labels) {
+      const m = /^T(\d+)-(.+)$/.exec(l);
+      if (!m) continue;
+      (perChunk[m[1]] = perChunk[m[1]] || new Set()).add(m[2]);
+    }
+    let mx = 0;
+    for (const k in perChunk) mx = Math.max(mx, perChunk[k].size);
+    return mx;
+  }
+
   function loadSrtText(text) {
     const parsed = parseSRT(text);
     segments = parsed.segments;
     const labels = parsed.labels;
 
     if (labels.length > 0 && areLocalLabels(labels)) {
-      // Etiquettes locales par troncon -> mode reconciliation manuel
+      // Etiquettes locales par troncon -> mode reconciliation manuel.
+      // Nombre de locuteurs par DEFAUT = ce que la diarisation a trouve
+      // (clampe a [2, MAX] : le selecteur propose 2..4).
+      nSpeakers = Math.min(Math.max(speakersFromLocalLabels(labels) || 2, 2), MAX);
+      const sc = document.getElementById("speakerCount");
+      if (sc) sc.value = String(nSpeakers);
       selected = segments.length ? 0 : -1;
       lastPlaying = -1;
       render();

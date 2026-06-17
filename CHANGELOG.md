@@ -19,6 +19,9 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
   qui affiche alors directement ces noms (au lieu de « Loc 1/2 »). Nouvelle
   fonction `nameAllSpeakers` (nomme tous les locuteurs globaux, même pas encore
   assignés). `tagger.html`.
+- **Nombre de locuteurs par défaut = celui de la diarisation** : déduit des
+  étiquettes locales `T<tronçon>-<lettre>` (max de voix distinctes par tronçon),
+  clampé à [2, 4]. Avant : toujours 2 par défaut. `tagger.html`.
 
 ---
 
