@@ -22,6 +22,12 @@ Retours de test (tagueur). À consolider en version taguée une fois la salve fi
 - **Nombre de locuteurs par défaut = celui de la diarisation** : déduit des
   étiquettes locales `T<tronçon>-<lettre>` (max de voix distinctes par tronçon),
   clampé à [2, 4]. Avant : toujours 2 par défaut. `tagger.html`.
+- **Tâche « État » 100 % silencieuse** : plus aucune fenêtre de terminal au
+  rafraîchissement (toutes les 2 min). Lancement via `wscript.exe` + nouveau shim
+  `scripts/_silent.vbs` (fenêtre masquée, aucune console allouée), sans droits
+  admin (le logon S4U les aurait exigés). `veille.ps1` installe la tâche État avec
+  `-Silencieux`. La tâche en service a été basculée. Le `-WindowStyle Hidden`
+  seul laissait un bref flash à chaque tick.
 
 ---
 

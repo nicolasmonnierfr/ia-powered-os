@@ -48,16 +48,24 @@ $TacheEtat   = "IA-Powered-OS - Etat"            # rafraichit ETAT.md (legere)
 $orchestrer    = Join-Path $PSScriptRoot "orchestrer.ps1"
 $lanceurTache  = Join-Path $PSScriptRoot "_tache.ps1"
 $lanceurEtat   = Join-Path $PSScriptRoot "_etat_tache.ps1"
+$shimSilencieux = Join-Path $PSScriptRoot "_silent.vbs"
 function Get-PsExe { if (Get-Command pwsh -ErrorAction SilentlyContinue) { (Get-Command pwsh).Source } else { (Get-Command powershell).Source } }
 
-# Enregistre une tache planifiee : action = pwsh -Hidden -File <lanceur>
-# -Perimetre, repetition indefinie toutes les N min, logon interactif, SANS
-# blocage batterie (#19 : sinon DisallowStart/StopIfGoingOnBatteries=True par
-# defaut -> la tache ne tourne pas / est tuee sur batterie).
+# Enregistre une tache planifiee : repetition indefinie toutes les N min, logon
+# interactif, SANS blocage batterie (#19). Avec -Silencieux : lance via
+# wscript + _silent.vbs => AUCUNE fenetre (pas de console allouee), sans droits
+# admin (le logon S4U, lui, exige l'elevation). Utile pour la tache "Etat"
+# frequente (sinon flash de terminal a chaque tick).
 function Register-Tache {
-    param([string]$Nom, [string]$Lanceur, [string]$Perim, [int]$IntervalleMin)
-    $argLine   = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Lanceur`" -Perimetre `"$Perim`""
-    $action    = New-ScheduledTaskAction -Execute (Get-PsExe) -Argument $argLine -WorkingDirectory (Get-RepoHome)
+    param([string]$Nom, [string]$Lanceur, [string]$Perim, [int]$IntervalleMin, [switch]$Silencieux)
+    if ($Silencieux) {
+        $exe = "$env:WINDIR\System32\wscript.exe"
+        $argLine = '"{0}" "{1}" -NoProfile -ExecutionPolicy Bypass -File "{2}" -Perimetre "{3}"' -f $shimSilencieux, (Get-PsExe), $Lanceur, $Perim
+    } else {
+        $exe = Get-PsExe
+        $argLine = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Lanceur`" -Perimetre `"$Perim`""
+    }
+    $action    = New-ScheduledTaskAction -Execute $exe -Argument $argLine -WorkingDirectory (Get-RepoHome)
     $trigger   = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) `
                    -RepetitionInterval (New-TimeSpan -Minutes $IntervalleMin)
     $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive
@@ -107,7 +115,7 @@ if ($Installer) {
     # Deux taches independantes : la transcription (longue, inline) ne bloque pas
     # le rafraichissement de ETAT.md (tache "Etat", legere et frequente).
     Register-Tache -Nom $TacheNom  -Lanceur $lanceurTache -Perim $perim -IntervalleMin $IntervalleMin
-    Register-Tache -Nom $TacheEtat -Lanceur $lanceurEtat  -Perim $perim -IntervalleMin $IntervalleEtatMin
+    Register-Tache -Nom $TacheEtat -Lanceur $lanceurEtat  -Perim $perim -IntervalleMin $IntervalleEtatMin -Silencieux
     Write-Ok "Taches planifiees installees :"
     Write-Info "  '$TacheNom'  (transcription INLINE + couper/anonymiser) : toutes les $IntervalleMin min"
     Write-Info "  '$TacheEtat' (rafraichit ETAT.md, lecture seule)        : toutes les $IntervalleEtatMin min"
