@@ -14,11 +14,14 @@ parenthèses) et retiré du backlog.
 Retours de test (tagueur). À consolider en version taguée une fois la salve finie.
 
 ### Corrigé
-- **Tagueur — marques de la minimap décalées** : les marques « non diarisé » (et
-  les coupes) étaient positionnées proportionnellement à la **durée audio**, alors
-  que la liste et le viewport sont par **ligne** → marques pas en face du segment.
-  La minimap est désormais calée sur les **positions DOM réelles des lignes**
-  (alignement exact) ; rafraîchie en direct au tagage.
+- **Tagueur — minimap décalée (marques ET rectangle de visualisation)** : les
+  marques « non diarisé »/coupes étaient positionnées par la **durée audio** (≠
+  liste par ligne), et le rectangle de visualisation + les marques étaient
+  normalisés par `scrollHeight`, **gonflé par le padding bas de 40vh** → marques
+  tassées et rectangle pouvant flotter dans le vide sous les segments. Désormais
+  tout est calé sur les **positions DOM réelles des lignes** et normalisé par la
+  **hauteur de contenu** (hors padding) ; le rectangle est borné à la zone de
+  contenu. Alignement exact marques / rectangle / segments ; rafraîchi au tagage.
 - **Éditeur d'alias — bouton ▶ sans effet** : `serveur_editeur` servait l'audio
   avec un type MIME deviné (souvent `octet-stream` pour `.m4a`) → le `<audio>` ne
   décodait pas. Table MIME explicite (comme le tagueur).

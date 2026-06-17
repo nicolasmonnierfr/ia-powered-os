@@ -603,12 +603,16 @@
   }
 
   // ---- Minimap : bandes proportionnelles a la duree ----
-  function timelineBounds() {
-    if (segments.length === 0) return { t0: 0, span: 1 };
-    const t0 = segments[0].start;
-    const tEnd = segments[segments.length - 1].end;
-    const span = Math.max(tEnd - t0, 0.001);
-    return { t0, span };
+  // Hauteur de CONTENU de la liste (hors grand padding bas de 40vh) : reference de
+  // la minimap, pour que marques ET viewport remplissent la minimap et restent
+  // alignes avec les segments (et non tasses par le vide du padding).
+  function mmContentHeight() {
+    const nodes = segList.querySelectorAll(".seg");
+    if (nodes.length) {
+      const last = nodes[nodes.length - 1];
+      return Math.max(last.offsetTop + last.offsetHeight, 1);
+    }
+    return segList.scrollHeight || 1;
   }
 
   function renderMinimap() {
@@ -617,7 +621,7 @@
     // sur la durée audio : ainsi chaque marque (non-diarisé, coupe) est PILE en
     // face de son segment, et cohérente avec le viewport (qui suit le scroll).
     const nodes = segList.querySelectorAll(".seg");
-    const totalH = segList.scrollHeight || 1;
+    const totalH = mmContentHeight();
     let colors = "", ctrl = "";
     segments.forEach((seg, i) => {
       const node = nodes[i];
@@ -660,17 +664,23 @@
     const node = segList.querySelector(`.seg[data-i="${cur}"]`);
     if (!node) { el.style.display = "none"; return; }
     el.style.display = "block";
-    el.style.top = (node.offsetTop / (segList.scrollHeight || 1) * 100) + "%";
+    el.style.top = (node.offsetTop / mmContentHeight() * 100) + "%";
   }
 
   function updateMinimapViewport() {
     const el = document.getElementById("mmView");
     if (!el || segments.length === 0) return;
-    const sc = segList.scrollHeight;
-    if (sc <= segList.clientHeight) { el.style.display = "none"; return; }
+    if (segList.scrollHeight <= segList.clientHeight) { el.style.display = "none"; return; }
+    // Normalise par la hauteur de CONTENU (pas scrollHeight, gonfle par le padding
+    // bas) -> le viewport reste en face des segments ; on le borne a la zone de
+    // contenu (scroll dans le padding final = viewport en bas du contenu).
+    const denom = mmContentHeight();
+    let h = Math.min(segList.clientHeight / denom * 100, 100);
+    let top = segList.scrollTop / denom * 100;
+    if (top + h > 100) top = Math.max(0, 100 - h);
     el.style.display = "block";
-    el.style.top = (segList.scrollTop / sc * 100) + "%";
-    el.style.height = (segList.clientHeight / sc * 100) + "%";
+    el.style.top = top + "%";
+    el.style.height = h + "%";
   }
 
   // Clic sur l'une ou l'autre zone -> aller au segment a cette position verticale
