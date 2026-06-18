@@ -9,6 +9,19 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.17.0] — 2026-06-18
+
+### Ajouté
+- **Éditeur d'alias : forme réelle (canonique) éditable par entrée.** La forme
+  injectée à la **repersonnalisation** (le « vrai nom » qui remplace le pseudo)
+  était systématiquement la **variante la plus longue** — souvent une mauvaise
+  transcription (ex. `Societe_1` → « cliquite » au lieu de « ClikIt », ou un
+  canonique placeholder/`Locuteur 2`). Chaque groupe a désormais un champ
+  **« → réel »** : tu y saisis l'orthographe correcte, utilisée telle quelle à
+  l'export de la mémoire puis par `ia repersonnaliser`. Vide = comportement par
+  défaut (variante la plus longue, affichée en placeholder). Corrige aussi
+  `buildMemoire` (qui figeait la plus longue) — sans toucher au reste de la mémoire.
+
 ## [1.16.0] — 2026-06-18
 
 ### Ajouté

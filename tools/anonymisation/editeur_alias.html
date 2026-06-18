@@ -49,6 +49,10 @@
     background: var(--panel-2); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .pseudo-input { background: var(--bg); color: var(--ink); border: 1px solid var(--line);
     border-radius: 5px; padding: 5px 9px; font: inherit; font-weight: 600; width: 150px; }
+  .cano-arrow { color: var(--ink-faint); font-weight: 700; }
+  .cano-input { background: var(--bg); color: var(--ink); border: 1px dashed var(--line);
+    border-radius: 5px; padding: 5px 9px; font: inherit; width: 160px; }
+  .cano-input::placeholder { color: var(--ink-faint); font-style: italic; }
   .type-badge { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-weight: 600;
     text-transform: uppercase; letter-spacing: .03em; color: #0c1014; }
   .type-PERSONNE { background: var(--t-person); }
@@ -248,7 +252,7 @@
     for (const c of (data.candidats || [])) {
       const key = c.pseudo_propose || (c.type + "_?");
       if (!byPseudo[key]) {
-        byPseudo[key] = { id: nextId(), pseudo: key, type: c.type, variants: [] };
+        byPseudo[key] = { id: nextId(), pseudo: key, type: c.type, canonique: "", variants: [] };
       }
       byPseudo[key].variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
@@ -278,9 +282,17 @@
     memoireChargee = mem || {};
     groups = []; ignored = []; generiques = [];
     for (const e of (mem.entrees || [])) {
+      const variantes = e.variantes || [];
+      const plusLongue = variantes.reduce((a, b) => (b.length > a.length ? b : a), "");
+      // On ne pré-remplit le champ « → réel » que si le canonique enregistré DIVERGE
+      // du défaut (variante la plus longue) — i.e. un choix délibéré. Sinon on le
+      // laisse vide (le placeholder montre le défaut) pour ne pas figer un mauvais
+      // auto-choix (ex. « cliquite ») et inviter à corriger.
+      const cano = (e.canonique && e.canonique !== plusLongue) ? e.canonique : "";
       groups.push({
         id: nextId(), pseudo: e.pseudo, type: e.type || typeFromPseudo(e.pseudo),
-        variants: (e.variantes || []).map(t => ({
+        canonique: cano,
+        variants: variantes.map(t => ({
           texte: t, occurrences: 0, score: 1, source: e.source || "alias", exemple: "",
           positions: [], homonymes: [], nouveau: false   // vient de la memoire client existante
         }))
@@ -328,7 +340,7 @@
       const key = c.pseudo_propose || (c.type + "_?");
       let g = byPseudo[key];
       if (!g) {
-        g = { id: nextId(), pseudo: key, type: c.type, variants: [] };
+        g = { id: nextId(), pseudo: key, type: c.type, canonique: "", variants: [] };
         groups.push(g); byPseudo[key] = g;
       }
       const nv = {
@@ -375,6 +387,13 @@
     updateStats();
   }
 
+  // Variante la plus longue d'un groupe (forme canonique PAR DÉFAUT si l'utilisateur
+  // n'en a pas saisi une — cf. champ « → réel » et buildMemoire).
+  function variantePlusLongue(g) {
+    return (g.variants || []).map(v => v.texte)
+      .reduce((a, b) => (b.length > a.length ? b : a), "");
+  }
+
   function renderGroup(g) {
     // A : on n'affiche que les variantes PERTINENTES pour le fichier en cours
     // (nouvelles, ou variantes de la memoire effectivement presentes dans ce
@@ -391,6 +410,20 @@
     const pseudo = document.createElement("input");
     pseudo.className = "pseudo-input"; pseudo.value = g.pseudo;
     pseudo.addEventListener("change", () => { g.pseudo = pseudo.value.trim(); });
+
+    // Forme RÉELLE (canonique) = ce qui remplace le pseudo à la repersonnalisation.
+    // Éditable : sinon c'est la variante la plus LONGUE qui est prise par défaut
+    // (souvent une mauvaise transcription, ex. « cliquite » au lieu de « ClikIt »).
+    const flecheCano = document.createElement("span");
+    flecheCano.className = "cano-arrow"; flecheCano.textContent = "→";
+    const cano = document.createElement("input");
+    cano.className = "cano-input";
+    cano.placeholder = variantePlusLongue(g) || g.pseudo;   // forme par défaut affichée en gris
+    cano.value = g.canonique || "";
+    cano.title = "Nom RÉEL (forme canonique) injecté à la repersonnalisation.\n"
+      + "Vide = variante la plus longue (par défaut). Corrige ici la bonne orthographe "
+      + "(ex. « ClikIt », « Olivier Régnier »).";
+    cano.addEventListener("change", () => { g.canonique = cano.value.trim(); });
 
     const typeSel = document.createElement("select");
     typeSel.className = "type-select";
@@ -421,7 +454,7 @@
     });
     actions.appendChild(ignBtn);
 
-    head.append(pseudo, badge, typeSel, count, actions);
+    head.append(pseudo, flecheCano, cano, badge, typeSel, count, actions);
     el.appendChild(head);
 
     const vars = document.createElement("div");
@@ -747,10 +780,12 @@
     const base = memoireChargee || {};
     const entrees = groups.map(g => {
       const variantes = g.variants.map(v => v.texte);
-      // canonique = variante la plus longue (forme de référence)
-      const canonique = variantes.length
+      // canonique = forme RÉELLE injectée à la repersonnalisation. Priorité au champ
+      // « → réel » saisi par l'humain ; à défaut, la variante la plus longue.
+      const plusLongue = variantes.length
         ? variantes.reduce((a, b) => (b.length > a.length ? b : a))
         : g.pseudo;
+      const canonique = (g.canonique && g.canonique.trim()) || plusLongue;
       // source : si une variante au moins venait d'un alias forcé, on garde
       // "alias" ; sinon on conserve la source dominante observée.
       const src = g.variants.some(v => v.source === "alias") ? "alias"
