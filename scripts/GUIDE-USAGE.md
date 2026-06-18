@@ -91,8 +91,14 @@ ia taguer
   - **Édition** (par défaut) : audio **non coupé** + transcript **avec les parties
     cachées** → tu reprends le travail, tu peux **dé-cacher** et réajuster le plan,
     sans décalage.
-  - **Finalisée** : audio **coupé** + transcript **recalé** → relecture du livrable.
-    Disponible une fois `ia couper` passé.
+  - **Finalisée** : audio **coupé** + transcript **recalé** → relecture du livrable
+    (lecture seule). Disponible une fois `ia couper` passé.
+- **Principe** : `2_coupe\<nom>.edition.json` est **le** document de travail (source
+  de vérité). `plan_de_coupe.json`, `_coupe.srt`, `_coupe.txt` et l'audio coupé en
+  sont des **sorties régénérées** — ne les édite jamais à la main. Pour corriger un
+  texte (y compris depuis « ✎ corriger » de l'anonymisation), on rouvre **l'Édition**,
+  puis on ré-exporte ; un entretien plus ancien sans `edition.json` est reconstruit
+  automatiquement à l'ouverture (noms + parties cachées restaurés).
 - Le serveur local s'arrête **quand tu fermes l'onglet** (ou Ctrl+C dans la
   fenêtre PowerShell).
 

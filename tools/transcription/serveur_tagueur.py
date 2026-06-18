@@ -416,6 +416,26 @@ def watchdog(etat: Etat, httpd):
         time.sleep(CHECK_EVERY)
 
 
+def _migrer_edition_si_absent(root: Path):
+    """Reconstruit 2_coupe/<stem>.edition.json (document de travail) s'il manque
+    mais que les artefacts derives existent (brut + plan + .srt coupe). Voir
+    reconstruire_edition.py. Non bloquant : en cas d'echec, la vue Edition
+    retombe simplement sur le .srt brut."""
+    if _etat_edition(root) is not None:
+        return
+    coupe = root / "2_coupe"
+    if not (coupe / "plan_de_coupe.json").is_file():
+        return
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import reconstruire_edition as R
+        out, info = R.reconstruire(root)
+        if out is not None:
+            print(f"[serveur] Document de travail reconstruit : 2_coupe/{out.name} ({info})")
+    except Exception as e:
+        print(f"[serveur] Reconstruction edition.json ignoree : {e}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Serveur local du tagueur.")
     ap.add_argument("--root", required=True, help="Dossier racine de l'entretien (sert l'audio + le .srt).")
@@ -431,6 +451,13 @@ def main():
         print(f"[ERREUR] Dossier introuvable : {root}", file=sys.stderr); sys.exit(1)
     if not tagger.is_file():
         print(f"[ERREUR] tagger.html introuvable : {tagger}", file=sys.stderr); sys.exit(1)
+
+    # MIGRATION LEGACY : edition.json est LE document de travail. Un entretien
+    # traite avant son introduction n'a que les sorties derivees (plan + .srt
+    # coupe). On reconstitue alors le document de travail (timeline originale,
+    # parties cachees, vrais noms) -> la vue Edition reprend tout (plus de
+    # re-saisie des noms ni de perte du plan). Idempotent et non bloquant.
+    _migrer_edition_si_absent(root)
 
     etat = Etat(root, tagger)
     Handler = make_handler(etat)

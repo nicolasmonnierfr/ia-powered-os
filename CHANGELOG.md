@@ -9,6 +9,33 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.11.0] — 2026-06-18
+
+### Ajouté
+- **`edition.json` = LE document de travail (source de vérité unique)** : principe
+  posé explicitement. Le tagueur édite toujours la timeline ORIGINALE (tous les
+  segments, parties cachées, noms, texte) ; `plan_de_coupe.json`, `_coupe.srt`,
+  `_coupe.txt` et l'audio coupé en sont des **sorties régénérées** à chaque export,
+  jamais éditées à la main (la vue Finalisée reste en lecture seule).
+- **Reconstruction automatique du document de travail (entretiens legacy)** :
+  nouveau `tools/transcription/reconstruire_edition.py`. Les entretiens traités
+  avant l'introduction de `edition.json` n'avaient que les sorties dérivées ;
+  `serveur_tagueur.py` reconstitue désormais `2_coupe/<stem>.edition.json` au
+  démarrage s'il manque, à partir du `.srt` brut (1_transcription), du
+  `plan_de_coupe.json` et du `.srt` coupé : segments conservés **dé-recalés** vers
+  la timeline originale (vrais noms + texte corrigé), segments cachés restaurés
+  depuis le brut (`cut=true`). Idempotent, non bloquant.
+
+### Corrigé
+- **`ia analyser` → « ✎ corriger » : re-saisie des noms + perte du plan de coupe**.
+  Depuis la vue Édition par défaut (v1.10.0), « corriger » rouvrait le tagueur sur
+  le `.srt` brut (étiquettes locales) quand aucun `edition.json` n'existait → noms
+  à re-saisir, et un ré-export aurait **écrasé tout le montage** (le brut n'a ni
+  noms ni segments cachés). Avec la reconstruction ci-dessus, l'Édition reprend le
+  document de travail complet (noms + parties cachées) — plus de re-saisie, plan
+  réellement modifiable. (Rappel du flux : corriger → Édition → ré-exporter →
+  `ia couper` régénère l'audio → `ia identifier` rafraîchit l'anonymisation.)
+
 ## [1.10.1] — 2026-06-18
 
 ### Corrigé
