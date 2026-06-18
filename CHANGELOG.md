@@ -9,6 +9,21 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.16.0] — 2026-06-18
+
+### Ajouté
+- **`ia repersonnaliser -Memoire <chemin>` : cibler une mémoire explicite.**
+  Jusqu'ici la mémoire (`memoire_client.json`) était toujours résolue par
+  recherche **ascendante** depuis le répertoire courant — impossible de
+  repersonnaliser un rapport situé **hors de l'arborescence du périmètre**.
+  Le nouveau paramètre `-Memoire` court-circuite cette recherche et pointe une
+  mémoire donnée (validée : erreur propre si le fichier n'existe pas) ; sans lui,
+  le comportement reste inchangé. Le tube `desanonymiser.py` acceptait déjà
+  `--memoire` : l'option n'est qu'exposée au niveau du wrapper (extension de #12).
+- En complément, `repersonnaliser` ne crée plus de force le dossier
+  `3_anonymisation\` dans le répertoire courant (il n'y écrit rien) — évite un
+  dossier parasite quand on lance la commande hors d'un entretien.
+
 ## [1.15.0] — 2026-06-18
 
 ### Ajouté

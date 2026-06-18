@@ -15,6 +15,8 @@
 # Le perimetre (memoire_client.json) est trouve par recherche ASCENDANTE
 # depuis l'entretien. Au tout premier entretien d'un perimetre, une
 # memoire_client.json est creee dans le parent immediat.
+# -Memoire <chemin> court-circuite cette recherche et cible une memoire precise
+# (utile pour 'repersonnaliser' un rapport situe hors de l'arbo du perimetre).
 #
 # Suivi (entretien.json + logs centralises) : les trois sous-commandes sont
 # instrumentees sous l'etape "anonymisation" (champ details.sous_etape). C'est
@@ -69,20 +71,43 @@ if ($Commande -ne "repersonnaliser") {
     Write-Info "Transcript source : $($srcItem.Name)  (dans $($srcItem.Directory.Name)\)"
 }
 
-# --- Resolution du perimetre (memoire_client.json par recherche ascendante) ---
-$perim = Resolve-Perimetre
-if ($perim.MemoireExiste) {
-    Write-Info "Perimetre (memoire trouvee) : $($perim.Dir)"
-} elseif ($perim.AncienAlias) {
-    Write-Avert "Ancien format detecte (alias.yaml) sans memoire_client.json."
-    Write-Info  "Migre-le une fois en memoire unique :"
-    Write-Info  "  & `$python `"`$repo\tools\anonymisation\migrer.py`" --dir `"$($perim.Dir)`""
-    Write-Avert "En attendant, une nouvelle memoire sera initialisee dans $($perim.Dir)"
+# --- Resolution du perimetre (memoire_client.json) ----------------------------
+# Par defaut : recherche ASCENDANTE depuis l'entretien courant. Avec -Memoire,
+# on cible explicitement une memoire donnee : utile quand le rapport a
+# repersonnaliser est HORS de l'arborescence du perimetre (#12), ou pour pointer
+# une memoire d'un autre perimetre sans avoir a se deplacer.
+if ($Memoire) {
+    if (-not (Test-Path -LiteralPath $Memoire)) { Write-Echec "Memoire introuvable : $Memoire"; exit 1 }
+    $memPath = (Resolve-Path -LiteralPath $Memoire).Path
+    $perim = [pscustomobject]@{
+        MemoirePath   = $memPath
+        Dir           = (Split-Path -Parent $memPath)
+        MemoireExiste = $true
+        AncienAlias   = $null
+    }
+    Write-Info "Perimetre (memoire fournie via -Memoire) : $($perim.MemoirePath)"
 } else {
-    Write-Avert "Aucune memoire_client.json en remontant : un nouveau perimetre sera initialise dans $($perim.Dir)"
+    $perim = Resolve-Perimetre
+    if ($perim.MemoireExiste) {
+        Write-Info "Perimetre (memoire trouvee) : $($perim.Dir)"
+    } elseif ($perim.AncienAlias) {
+        Write-Avert "Ancien format detecte (alias.yaml) sans memoire_client.json."
+        Write-Info  "Migre-le une fois en memoire unique :"
+        Write-Info  "  & `$python `"`$repo\tools\anonymisation\migrer.py`" --dir `"$($perim.Dir)`""
+        Write-Avert "En attendant, une nouvelle memoire sera initialisee dans $($perim.Dir)"
+    } else {
+        Write-Avert "Aucune memoire_client.json en remontant : un nouveau perimetre sera initialise dans $($perim.Dir)"
+    }
 }
 
-$anonDir = Get-SousDossier "3_anonymisation" -Creer
+# 'repersonnaliser' part d'un RAPPORT (souvent hors entretien) et n'ecrit rien
+# dans 3_anonymisation\ : on ne force pas sa creation pour eviter un dossier
+# parasite. Les autres etapes y deposent leurs sorties -> creation garantie.
+$anonDir = if ($Commande -eq "repersonnaliser") {
+    Get-SousDossier "3_anonymisation"
+} else {
+    Get-SousDossier "3_anonymisation" -Creer
+}
 
 # =============================================================================
 # COMMANDE : identifier  (PRE-ANALYSE AUTO : detection NER, sans editeur)
