@@ -34,20 +34,45 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memoire as M  # noqa: E402
 
+# Console Windows en cp1252 : un print accentué/emoji (« ⚠ ») planterait
+# (UnicodeEncodeError) et ferait sortir le script en erreur -> ia repersonnaliser
+# le verrait comme un échec alors que le fichier est produit. On force UTF-8.
+for _flux in (sys.stdout, sys.stderr):
+    try:
+        _flux.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 
 def die(msg, code=1):
     print(f"[ERREUR] {msg}", file=sys.stderr)
     sys.exit(code)
 
 
+def _est_placeholder(s):
+    """Étiquette technique du tagueur, PAS un vrai nom : « NON_AFFECTE » ou
+    « Locuteur N ». A ne jamais réinjecter telle quelle dans un livrable."""
+    return (not s) or s == "NON_AFFECTE" or bool(re.match(r"(?i)\s*locuteur\s*\d+\s*$", s))
+
+
 def construire_mapping(mem, court=False):
-    """Liste (pseudo, remplacement), pseudos longs d'abord (PERSONNE_10 avant _1)."""
+    """Liste (pseudo, remplacement), pseudos longs d'abord (PERSONNE_10 avant _1).
+    On écarte les variantes/canoniques PLACEHOLDER (NON_AFFECTE, « Locuteur N ») :
+    un locuteur jamais nommé ne doit pas réintroduire ces étiquettes techniques.
+    En dernier recours (aucune vraie variante), on conserve le PSEUDO (signale un
+    nom à compléter dans la mémoire, au lieu d'un faux « Locuteur 2 »)."""
     out = []
     for e in mem.get("entrees", []):
-        if court and e.get("variantes"):
-            repl = min(e["variantes"], key=len)
+        vraies = [v for v in (e.get("variantes") or []) if not _est_placeholder(v)]
+        cano = e.get("canonique")
+        if court and vraies:
+            repl = min(vraies, key=len)
+        elif cano and not _est_placeholder(cano):
+            repl = cano
+        elif vraies:
+            repl = max(vraies, key=len)
         else:
-            repl = e.get("canonique") or (e["variantes"][0] if e.get("variantes") else e["pseudo"])
+            repl = e["pseudo"]
         out.append((e["pseudo"], repl))
     out.sort(key=lambda t: -len(t[0]))
     return out

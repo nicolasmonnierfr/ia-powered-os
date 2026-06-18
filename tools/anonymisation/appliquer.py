@@ -208,10 +208,15 @@ def main():
         Path(args.ignorer_global) if args.ignorer_global else None)
     ignorer = list(mem.get("ignorer", [])) + list(ignorer_global)
 
-    # Canoniques + compteurs cohérents avant écriture.
+    # Canoniques + compteurs cohérents avant écriture. Le canonique sert de cible
+    # à la repersonnalisation : on évite d'y figer une étiquette technique
+    # (« NON_AFFECTE » / « Locuteur N »), qui réintroduirait un faux nom.
+    def _placeholder(s):
+        return (not s) or s == "NON_AFFECTE" or bool(re.match(r"(?i)\s*locuteur\s*\d+\s*$", s))
     for e in mem["entrees"]:
         if not e.get("canonique") and e.get("variantes"):
-            e["canonique"] = max(e["variantes"], key=len)
+            vraies = [v for v in e["variantes"] if not _placeholder(v)]
+            e["canonique"] = max(vraies or e["variantes"], key=len)
     mem["compteurs"] = M.compteurs_depuis_entrees(mem["entrees"])
 
     mapping = M.mapping_remplacement(mem)

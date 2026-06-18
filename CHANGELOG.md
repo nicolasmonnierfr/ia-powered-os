@@ -9,6 +9,21 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.14.2] — 2026-06-18
+
+### Corrigé
+- **`ia repersonnaliser` (desanonymiser.py) sortait en erreur** sur le `print`
+  final « ⚠ » quand la console est en cp1252 (`UnicodeEncodeError`) — alors que le
+  fichier `_REPERSONNALISE` était bel et bien produit : la commande le signalait
+  comme un échec. stdout/stderr sont désormais forcés en UTF-8 (même correctif que
+  `appliquer.py`).
+- **Repersonnalisation : ne plus réinjecter d'étiquette technique.** Un locuteur
+  jamais nommé pouvait avoir pour canonique « NON_AFFECTE » ou « Locuteur N » ;
+  ces placeholders étaient réintroduits tels quels dans le livrable. `desanonymiser`
+  (et le calcul du canonique dans `appliquer.py`) les ignorent désormais et
+  reprennent une vraie variante ; à défaut, le **pseudo** est conservé (signal
+  visible qu'un nom reste à compléter dans la mémoire, plutôt qu'un faux nom).
+
 ## [1.14.1] — 2026-06-18
 
 ### Modifié
