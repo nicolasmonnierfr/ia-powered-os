@@ -32,6 +32,7 @@ param(
     [Parameter(Position = 0)] [ValidateSet("identifier", "analyser", "appliquer", "repersonnaliser")] [string]$Commande,
     [string]$Transcript,
     [string]$Rapport,
+    [string]$Memoire,
     [switch]$Court,
     [int]$Port = 8770,
     [switch]$NoBrowser

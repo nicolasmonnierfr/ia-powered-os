@@ -9,6 +9,22 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.15.0] — 2026-06-18
+
+### Ajouté
+- **Alerte « prénom partagé » basée sur la mémoire client.** Un même prénom peut
+  désigner plusieurs personnes (ex. deux « Jean »), que la mémoire globale ne sait
+  pas distinguer toute seule. `detecter.py` signale désormais tout candidat
+  PERSONNE dont l'ensemble des tokens est inclus dans les variantes d'**au moins
+  deux entrées distinctes** de la mémoire (« Jean » matche « Jean Dupont » ET
+  « Jean Martin », mais « Jean Dupont » non) : champ `ambigu_memoire` dans le
+  `.etat.json` + alerte console. L'éditeur d'alias affiche un badge **« ⚠ prénom
+  partagé »** (avec les personnes possibles) sur la variante et un compteur dans
+  les stats. La **résolution reste humaine** : préciser qui est visé en ajoutant
+  une initiale (ex. « Jean R. ») — divergence assumée vs l'audio — via « ✎ corriger »
+  (étiquette du locuteur et/ou mentions du corps), puis « 🔄 Relancer
+  l'identification ». L'outil ne tranche pas (il ne peut pas deviner quel Jean).
+
 ## [1.14.2] — 2026-06-18
 
 ### Corrigé

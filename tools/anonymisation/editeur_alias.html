@@ -77,6 +77,9 @@
   .variant .ex mark { background: var(--t-email); color: #14161a; padding: 0 2px;
     border-radius: 3px; font-style: normal; font-weight: 600; }
   .variant .homo-warn { color: var(--danger); cursor: help; font-weight: 700; }
+  /* Nom ambigu d'apres la memoire (un meme prenom = plusieurs personnes connues). */
+  .variant .ambig-warn { color: var(--danger); cursor: help; font-weight: 700; font-size: 10px;
+    border: 1px solid var(--danger); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
   /* Label DÉTECTÉ dans ce fichier, pas encore dans la mémoire client (à traiter). */
   .variant.is-new { background: rgba(94,196,136,0.12); border-color: rgba(94,196,136,0.40); }
   /* Sélecteur de fusion cliquable */
@@ -250,7 +253,8 @@
       byPseudo[key].variants.push({
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
-        positions: c.positions || [], homonymes: c.homonymes || [], nouveau: true
+        positions: c.positions || [], homonymes: c.homonymes || [],
+        ambigu_memoire: c.ambigu_memoire || null, nouveau: true
       });
     }
     groups = Object.values(byPseudo);
@@ -317,6 +321,7 @@
           ev.occurrences = c.occurrences;
           if (c.positions && c.positions.length) ev.positions = c.positions;
           if (c.homonymes && c.homonymes.length) ev.homonymes = c.homonymes;
+          if (c.ambigu_memoire) ev.ambigu_memoire = c.ambigu_memoire;
         }
         continue;
       }
@@ -329,7 +334,8 @@
       const nv = {
         texte: c.texte, occurrences: c.occurrences || 1, score: c.score || 0,
         source: c.source || "ner", exemple: (c.exemples && c.exemples[0]) || "",
-        positions: c.positions || [], homonymes: c.homonymes || [], nouveau: true
+        positions: c.positions || [], homonymes: c.homonymes || [],
+        ambigu_memoire: c.ambigu_memoire || null, nouveau: true
       };
       g.variants.push(nv);
       varByLow[low] = nv;
@@ -505,8 +511,19 @@
         + v.homonymes.join("\n• ")
         + "\n\nVérifie : même personne (à regrouper) ou personnes différentes (à garder séparées) ?";
     }
+    // Ambiguïté vs la MÉMOIRE : ce nom peut désigner plusieurs personnes connues.
+    let warnAmbig = null;
+    if (v.ambigu_memoire && v.ambigu_memoire.length) {
+      warnAmbig = document.createElement("span");
+      warnAmbig.className = "ambig-warn"; warnAmbig.textContent = "⚠ prénom partagé";
+      warnAmbig.title = "D'après la mémoire client, « " + v.texte + " » peut désigner PLUSIEURS personnes :\n• "
+        + v.ambigu_memoire.map(p => `${p.nom} (${p.pseudo})`).join("\n• ")
+        + "\n\nPrécise QUI est visé : ajoute une initiale (ex. « Jean R. ») via « ✎ corriger » "
+        + "— sur l'étiquette du locuteur et/ou les mentions du corps — puis relance « 🔄 Relancer l'identification ».";
+    }
     el.append(grip, txt);
     if (warn) el.append(warn);
+    if (warnAmbig) el.append(warnAmbig);
     el.append(src, meta, ex, va);
 
     el.addEventListener("dragstart", (ev) => {
@@ -707,11 +724,13 @@
   function updateStats() {
     const nVar = groups.reduce((a, g) => a + g.variants.length, 0);
     const nHomo = groups.reduce((a, g) => a + g.variants.filter(v => v.homonymes && v.homonymes.length).length, 0);
+    const nAmbig = groups.reduce((a, g) => a + g.variants.filter(v => v.ambigu_memoire && v.ambigu_memoire.length).length, 0);
     statsEl.innerHTML =
       `<span class="stat">Groupes <b>${groups.length}</b></span>
        <span class="stat">Variantes <b>${nVar}</b></span>
        <span class="stat">Ignorés <b>${ignored.length}</b></span>`
-      + (nHomo ? `<span class="stat" style="color:var(--danger)">⚠ Homonymes <b>${nHomo}</b></span>` : "");
+      + (nHomo ? `<span class="stat" style="color:var(--danger)">⚠ Homonymes <b>${nHomo}</b></span>` : "")
+      + (nAmbig ? `<span class="stat" style="color:var(--danger)">⚠ Prénoms partagés <b>${nAmbig}</b></span>` : "");
     exportBtn.disabled = (groups.length === 0 && ignored.length === 0 && generiques.length === 0);
     document.getElementById("footHint").textContent = transcriptName ? `Transcript : ${transcriptName}` : "";
   }

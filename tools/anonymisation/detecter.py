@@ -256,6 +256,7 @@ def main():
 
     candidats = assign_pseudos(list(found.values()), forced_map, existing, mem)
     n_homo = detecter_homonymes(candidats)
+    n_ambig = flag_ambig_memoire(candidats, mem)
 
     etat = {
         "transcript": tpath.name,
@@ -276,6 +277,10 @@ def main():
     if n_homo:
         print(f"\n[ALERTE] {n_homo} entité(s) PERSONNE en risque d'homonymie "
               f"(noms proches/partagés) — à lever dans l'éditeur.")
+    if n_ambig:
+        print(f"\n[ALERTE] {n_ambig} candidat(s) ambigu(s) vs la mémoire : un même "
+              f"prénom y désigne PLUSIEURS personnes. Précise qui (ajoute une "
+              f"initiale, ex. « Jean R. ») dans l'éditeur.")
     print(f"\nÉtat intermédiaire écrit : {out}")
     print("Étape suivante : valider dans l'éditeur HTML, puis appliquer.")
 
@@ -365,6 +370,43 @@ def detecter_homonymes(candidats: list) -> int:
                 if a["texte"] not in b["homonymes"]:
                     b["homonymes"].append(a["texte"])
     return sum(1 for c in persons if c["homonymes"])
+
+
+def flag_ambig_memoire(candidats: list, mem: dict) -> int:
+    """Signale les candidats PERSONNE qui, d'après la MÉMOIRE client, pourraient
+    désigner PLUSIEURS personnes connues (ex. le candidat « Jean » alors que la
+    mémoire connaît déjà « Jean Dupont » ET « Jean Martin »).
+
+    Règle : un candidat est ambigu si l'ENSEMBLE de ses tokens (mots >= 3 lettres)
+    est inclus dans les variantes d'AU MOINS DEUX entrées distinctes. Ainsi « Jean »
+    (token {jean}) matche les deux, mais « Jean Dupont » ({jean,dupont}) n'en matche
+    qu'une -> non ambigu. Ajoute c['ambigu_memoire'] = [{pseudo, nom}, ...] (les
+    personnes possibles) pour que l'éditeur invite à préciser (ajout d'une initiale).
+    L'outil NE tranche PAS. Retourne le nombre de candidats marqués."""
+    personnes = []   # (set_tokens, pseudo, canonique)
+    for e in mem.get("entrees", []):
+        if e.get("type") != "PERSONNE":
+            continue
+        toks = set()
+        for v in e.get("variantes", []):
+            toks |= _tokens(v)
+        if toks:
+            cano = e.get("canonique") or (e.get("variantes") or [e["pseudo"]])[0]
+            personnes.append((toks, e["pseudo"], cano))
+
+    n = 0
+    for c in candidats:
+        if c.get("type") != "PERSONNE":
+            continue
+        ctoks = _tokens(c["texte"])
+        if not ctoks:
+            continue
+        possibles = [(p, cano) for (toks, p, cano) in personnes if ctoks <= toks]
+        if len(possibles) >= 2:
+            c["ambigu_memoire"] = [{"pseudo": p, "nom": cano}
+                                   for p, cano in sorted(possibles)]
+            n += 1
+    return n
 
 
 if __name__ == "__main__":
