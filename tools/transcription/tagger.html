@@ -231,7 +231,7 @@
 
 <header>
   <h1>Tagueur de locuteurs</h1>
-  <span id="refName" title="Fichier de référence (audio d'origine)" style="font-weight:600;color:var(--ink);font-size:14px;"></span>
+  <span id="refName" title="Fichier de référence (audio d'origine)" style="font-weight:600;color:var(--ink);font-size:16px;"></span>
   <div class="file-loaders">
     <button class="btn" id="openDir" title="Ouvre (ou recharge) le dossier racine de l'entretien : charge l'audio + le .srt et prepare l'export vers 2_coupe">Ouvrir le dossier de l'entretien</button>
     <button class="btn btn-ghost" id="changeDir" title="Choisir un autre dossier d'entretien">Changer</button>
@@ -1376,7 +1376,11 @@
       majBoutonsVue(currentVue, man.vues);
       locuteursConnus = man.locuteurs_connus || [];   // pre-remplissage des noms (coherence inter-entretiens)
       reconcileSuggestion = man.reconcile || null;     // pre-remplissage de la reconciliation (empreinte vocale)
-      if (man.reference) { const r = document.getElementById("refName"); if (r) r.textContent = "🎧 " + man.reference; }
+      if (man.reference) {
+        const r = document.getElementById("refName"); if (r) r.textContent = "🎧 " + man.reference;
+        document.title = "Tagueur — " + man.reference;
+        const h1 = document.querySelector("header h1"); if (h1) h1.style.display = "none";  // épure : le nom de l'audio devient l'en-tête
+      }
       const qv = "?vue=" + encodeURIComponent(currentVue);
       // Audio (de la vue : non coupe en edition, coupe en finalise).
       if (man.audio) {
@@ -1385,21 +1389,16 @@
       }
       // Transcript : etat d'edition complet (.edition.json, parties cachees) si
       // disponible, sinon .srt (brut en edition, coupe en finalise).
-      let transStatut;
       if (man.etat) {
         const obj = await (await fetch("/api/etat" + qv)).json();
         loadEtat(obj);
-        transStatut = `état: ${man.etat}`;
       } else if (man.srt) {
         const txt = await (await fetch("/api/srt" + qv)).text();
         loadSrtText(txt);
-        transStatut = `srt: ${man.srt}`;
-      } else {
-        transStatut = "transcript: introuvable";
       }
-      const a = man.audio ? `audio: ${man.audio}` : "audio: introuvable";
-      const vlabel = currentVue === "finalise" ? "Finalisée" : "Édition";
-      setDirStatus(`Entretien chargé — ${vlabel} (${a}, ${transStatut})`, !!(man.audio && (man.etat || man.srt)));
+      // En-tête épurée : le nom de l'audio (refName) et le bouton de vue suffisent.
+      // On ne garde dirStatus que pour les erreurs / le résultat d'un « ?find= ».
+      setDirStatus("", true);
       if (!man.audio) alert("Aucun audio trouvé pour cette version.");
       if (!man.etat && !man.srt) alert("Aucun transcript trouvé (ni état d'édition, ni .srt).");
       applyFindFromURL();   // saut + lecture d'un terme passe en ?find= (depuis l'editeur d'alias)
@@ -2071,10 +2070,13 @@
   // Init
   buildControls();
 
-  // Mode serveur : auto-chargement de l'entretien + heartbeat. On masque les
-  // boutons d'ouverture manuelle (inutiles : tout vient du serveur).
+  // Mode projet (lancé par ia taguer) : l'entretien vient du serveur. On ÉPURE
+  // l'en-tête : seul le nom de l'audio reste (cf. refName). Sont masqués les
+  // chargeurs manuels (ouvrir/changer dossier, inputs audio + .srt) et le titre
+  // de l'outil — l'identité passe dans le titre de l'onglet (document.title).
   if (MODE_SERVEUR) {
     ["openDir", "changeDir"].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = "none"; });
+    ["audioFile", "srtFile"].forEach(id => { const e = document.getElementById(id); if (e && e.closest("label")) e.closest("label").style.display = "none"; });
     demarrerHeartbeat();
     serveurChargerEntretien();
   }

@@ -116,7 +116,7 @@
 
 <header>
   <h1>Éditeur d'alias</h1>
-  <span id="refName" title="Fichier de référence (audio d'origine)" style="font-weight:600;color:var(--ink);font-size:14px;"></span>
+  <span id="refName" title="Fichier de référence (audio d'origine)" style="font-weight:600;color:var(--ink);font-size:16px;"></span>
   <label class="loader">État de détection (.etat.json)
     <input type="file" id="stateFile" accept=".json,application/json"></label>
   <label class="loader">ou mémoire client (memoire_client.json)
@@ -817,7 +817,11 @@
   async function chargerDepuisServeur() {
     const man = await (await fetch("/api/manifest")).json();
     audioAvailable = !!man.audio;   // active les boutons ▶ de réécoute
-    if (man.reference) document.getElementById("refName").textContent = "🎧 " + man.reference;
+    if (man.reference) {
+      document.getElementById("refName").textContent = "🎧 " + man.reference;
+      document.title = "Éditeur d'alias — " + man.reference;
+      const h1 = document.querySelector("header h1"); if (h1) h1.style.display = "none";  // épure : le nom de l'audio devient l'en-tête
+    }
     // Refonte #14/#17 : si une mémoire client existe au périmètre, on la
     // charge ; puis on FUSIONNE les nouvelles détections de l'état (sans
     // écraser les regroupements existants). Sinon on initialise depuis l'état.
@@ -845,7 +849,9 @@
     const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
     ping(); setInterval(ping, 5000);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
-    // Masquer les inputs de chargement manuel (tout vient du serveur).
+    // Mode projet : en-tête épurée -> seul le nom de l'audio reste (refName, posé
+    // au chargement avec masquage du titre). On masque ici les inputs de
+    // chargement manuel (l'identité de l'outil passe dans document.title).
     ["stateFile", "aliasFile"].forEach(id => {
       const e = document.getElementById(id);
       if (e && e.closest("label")) e.closest("label").style.display = "none";

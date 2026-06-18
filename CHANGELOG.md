@@ -9,6 +9,18 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.14.1] — 2026-06-18
+
+### Modifié
+- **Tagueur & éditeur d'alias : en-tête épurée en mode projet.** Comme on travaille
+  désormais toujours par projet (lancement via `ia taguer` / `ia analyser`),
+  l'en-tête ne garde que **le nom de l'audio** (`🎧 <audio>`). Sont masqués : le
+  titre de l'outil, les boutons « Ouvrir / Changer le dossier », les champs de
+  chargement manuel (audio + `.srt` / `.etat.json` / mémoire) et le statut de
+  chargement verbeux. L'identité de l'outil passe dans le **titre de l'onglet**
+  (`Tagueur — <audio>` / `Éditeur d'alias — <audio>`). Le titre reste affiché en
+  repli si aucun audio n'est détecté (et en mode fichier autonome).
+
 ## [1.14.0] — 2026-06-18
 
 ### Modifié
