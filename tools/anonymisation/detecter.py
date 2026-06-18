@@ -232,7 +232,10 @@ def main():
             add_occurrence(txt, typ, score, ctx, "ner",
                            start=b.get("start"), end=b.get("end"))
 
-    # Forçages connus : ré-exposés en candidats (cohérence dans l'éditeur)
+    # Forçages connus : ré-exposés en candidats (cohérence dans l'éditeur).
+    # On ne ré-expose une variante d'alias QUE si elle apparaît réellement dans CE
+    # transcript : sinon l'état se remplirait de tous les noms du client (issus
+    # d'AUTRES entretiens), et l'éditeur les afficherait à tort comme « présents ».
     for e in mem.get("entrees", []):
         if e.get("source") != "alias":
             continue
@@ -242,6 +245,8 @@ def main():
                 found[v]["type"] = e["type"]
             elif v.lower() not in ignorer:
                 occ = len(re.findall(re.escape(v), full_text, flags=re.IGNORECASE))
+                if occ == 0:
+                    continue   # variante mémoire absente d'ici -> pas un candidat
                 found[v] = {"texte": v, "type": e["type"], "occurrences": occ,
                             "score": 1.0, "source": "alias", "exemples": [],
                             "positions": []}

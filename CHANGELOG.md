@@ -9,6 +9,23 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.10.1] — 2026-06-18
+
+### Corrigé
+- **Éditeur d'alias (`ia analyser`) : toute la mémoire client s'affichait** au lieu
+  des seules entités du transcript courant. `detecter.py` ré-expose les variantes
+  d'alias de `memoire_client.json` en candidats (cohérence inter-entretiens), mais
+  l'éditeur (`mergeFromState`) marquait « présent » **tout** candidat correspondant
+  à une variante mémoire, sans vérifier l'occurrence — neutralisant le masquage
+  prévu (`isHidden`) des entrées absentes. Résultat : les noms d'**autres**
+  entretiens du même client (à 0 occurrence ici) apparaissaient. Désormais une
+  variante mémoire n'est marquée présente (donc affichée) que si elle apparaît
+  réellement dans **ce** transcript ; les groupes mixtes gardent l'indicateur
+  « +N hors fichier ». En complément, `detecter.py` ne ré-expose plus en candidat
+  une variante d'alias absente du transcript (0 occurrence) — état plus propre.
+  Sans impact sur le livrable anonymisé (une entrée à 0 occurrence ne remplaçait
+  rien). S'applique aux états déjà générés (pas besoin de relancer `ia identifier`).
+
 ## [1.10.0] — 2026-06-18
 
 ### Ajouté

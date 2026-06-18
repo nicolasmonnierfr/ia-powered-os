@@ -304,12 +304,19 @@
       if (ignoreLow.has(low)) continue;
       const ev = varByLow[low];
       if (ev) {
-        // Label déjà connu (mémoire) ET présent dans CE fichier : on le marque
-        // présent (-> reste affiché) et on l'enrichit (occurrences/timecodes).
-        ev.present = true;
-        ev.occurrences = c.occurrences || ev.occurrences || 1;
-        if (c.positions && c.positions.length) ev.positions = c.positions;
-        if (c.homonymes && c.homonymes.length) ev.homonymes = c.homonymes;
+        // Label déjà connu (mémoire). detecter.py ré-expose TOUTES les variantes
+        // d'alias de la mémoire client en candidats — y compris à 0 occurrence
+        // (noms venant d'AUTRES entretiens du client) « pour cohérence ». Sans
+        // garde, on les marquerait toutes "présentes" et la mémoire entière
+        // s'afficherait ici (au lieu des seules entités de CE transcript). On ne
+        // marque donc présent (-> affiché, cf. isHidden) QUE si le terme apparaît
+        // réellement dans CE transcript (occurrences > 0), puis on l'enrichit.
+        if ((c.occurrences || 0) > 0) {
+          ev.present = true;
+          ev.occurrences = c.occurrences;
+          if (c.positions && c.positions.length) ev.positions = c.positions;
+          if (c.homonymes && c.homonymes.length) ev.homonymes = c.homonymes;
+        }
         continue;
       }
       const key = c.pseudo_propose || (c.type + "_?");
