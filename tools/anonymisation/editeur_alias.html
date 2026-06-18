@@ -142,6 +142,7 @@
   <div class="foot-actions">
     <button class="btn ghost" id="addEntity">+ Entité manuelle</button>
     <button class="btn ghost" id="addGenerique">+ Locuteur générique</button>
+    <button class="btn ghost" id="reidentifier" style="display:none;" title="Relancer la détection sur le transcript (après une correction de texte dans le tagueur) : rafraîchit les extraits et ajoute tout nouvel alias. Manuel.">🔄 Relancer l'identification</button>
     <button class="btn primary" id="exportYaml" disabled>Exporter la mémoire</button>
   </div>
 </footer>
@@ -811,40 +812,79 @@
   }
   exportBtn.addEventListener("click", exportMemoire);
 
+  // Charge (ou recharge) l'etat depuis le serveur : memoire client + detections.
+  // Reutilise au demarrage ET apres une re-identification (transcript corrige).
+  async function chargerDepuisServeur() {
+    const man = await (await fetch("/api/manifest")).json();
+    audioAvailable = !!man.audio;   // active les boutons ▶ de réécoute
+    if (man.reference) document.getElementById("refName").textContent = "🎧 " + man.reference;
+    // Refonte #14/#17 : si une mémoire client existe au périmètre, on la
+    // charge ; puis on FUSIONNE les nouvelles détections de l'état (sans
+    // écraser les regroupements existants). Sinon on initialise depuis l'état.
+    let memoireExiste = false;
+    if (man.memoire_existe) {
+      try {
+        const mem = await (await fetch("/api/memoire")).json();
+        loadFromMemoire(mem);
+        memoireExiste = true;
+      } catch (e) { /* repli état ci-dessous */ }
+    }
+    if (man.etat) {
+      const data = await (await fetch("/api/etat")).json();
+      if (memoireExiste) mergeFromState(data);   // fusion #17
+      else loadFromState(data);
+    }
+  }
+
   // ---- Mode serveur : chargement auto + heartbeat ----
   async function serveurInit() {
-    // Heartbeat (la fermeture de l'onglet arrete le serveur).
+    // Heartbeat (la fermeture de l'onglet arrete le serveur). On pingue aussi des
+    // que l'onglet redevient visible : pendant une correction dans le tagueur,
+    // cet onglet passe en arriere-plan et le navigateur ralentit ses timers ; un
+    // ping immediat au retour evite que le serveur soit considere comme inactif.
     const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
     ping(); setInterval(ping, 5000);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
     // Masquer les inputs de chargement manuel (tout vient du serveur).
     ["stateFile", "aliasFile"].forEach(id => {
       const e = document.getElementById(id);
       if (e && e.closest("label")) e.closest("label").style.display = "none";
     });
+    const rb = document.getElementById("reidentifier");
+    if (rb) rb.style.display = "";   // re-identification = action serveur
     try {
-      const man = await (await fetch("/api/manifest")).json();
-      audioAvailable = !!man.audio;   // active les boutons ▶ de réécoute
-      if (man.reference) document.getElementById("refName").textContent = "🎧 " + man.reference;
-      // Refonte #14/#17 : si une mémoire client existe au périmètre, on la
-      // charge ; puis on FUSIONNE les nouvelles détections de l'état (sans
-      // écraser les regroupements existants). Sinon on initialise depuis l'état.
-      let memoireExiste = false;
-      if (man.memoire_existe) {
-        try {
-          const mem = await (await fetch("/api/memoire")).json();
-          loadFromMemoire(mem);
-          memoireExiste = true;
-        } catch (e) { /* repli état ci-dessous */ }
-      }
-      if (man.etat) {
-        const data = await (await fetch("/api/etat")).json();
-        if (memoireExiste) mergeFromState(data);   // fusion #17
-        else loadFromState(data);
-      }
+      await chargerDepuisServeur();
     } catch (e) {
       alert("Chargement depuis le serveur impossible : " + (e && e.message ? e.message : e));
     }
   }
+
+  // Relance la DETECTION sur le transcript (corrige depuis le tagueur) puis
+  // RECHARGE l'editeur : les extraits reflètent la correction et tout NOUVEL alias
+  // apparaît. Manuel (bouton) — jamais automatique. La détection (spaCy) prend
+  // quelques secondes ; le heartbeat continue en parallèle (serveur threadé).
+  async function reidentifier() {
+    if (!MODE_SERVEUR) { alert("Disponible seulement via « ia analyser » (mode serveur)."); return; }
+    if (!confirm("Relancer la détection sur le transcript corrigé ?\n\n"
+      + "Les extraits sont rafraîchis et tout nouvel alias détecté est ajouté. "
+      + "Il faudra ré-exporter la mémoire ensuite pour re-valider (le transcript a changé).")) return;
+    const btn = document.getElementById("reidentifier");
+    const txt = btn.textContent; btn.disabled = true; btn.textContent = "⏳ Identification…";
+    try {
+      const r = await fetch("/api/reidentifier", { method: "POST" });
+      const res = await r.json();
+      if (!r.ok || !res.ok) throw new Error(res.error || ("HTTP " + r.status));
+      await chargerDepuisServeur();   // recharge avec les candidats rafraîchis
+      alert(`Identification relancée${res.candidats != null ? ` : ${res.candidats} candidat(s)` : ""}.\n`
+        + "Vérifie les entités (un fond vert = nouveau label) puis « Exporter la mémoire » pour re-valider.");
+    } catch (e) {
+      alert("Échec de la ré-identification : " + (e && e.message ? e.message : e));
+    } finally {
+      btn.disabled = false; btn.textContent = txt;
+    }
+  }
+  document.getElementById("reidentifier").addEventListener("click", reidentifier);
+
   if (MODE_SERVEUR) serveurInit();
 
 })();

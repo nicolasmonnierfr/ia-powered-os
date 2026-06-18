@@ -9,6 +9,27 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.12.0] — 2026-06-18
+
+### Ajouté
+- **Éditeur d'alias (`ia analyser`) — bouton « 🔄 Relancer l'identification »** :
+  après une correction de texte (via « ✎ corriger » → tagueur), l'éditeur ne
+  reflétait pas la modification (extraits figés, nouvel alias non détecté).
+  Nouveau bouton **manuel** (jamais automatique) : relance `detecter.py` sur le
+  transcript corrigé (route serveur `POST /api/reidentifier`), réécrit le
+  `.etat.json` et **recharge l'éditeur** (extraits à jour + tout nouvel alias).
+  Réécrire l'état efface la validation → il faut ré-exporter la mémoire pour
+  re-valider (cohérent : le transcript a changé).
+
+### Corrigé / robustesse
+- **Sessions d'édition tuées en arrière-plan** : le délai de grâce du heartbeat
+  des serveurs locaux (tagueur + éditeur d'alias) passe de **15 s à 60 s**, et
+  l'éditeur pingue dès que l'onglet redevient visible. Pendant une correction (le
+  tagueur s'ouvre dans un autre onglet, l'éditeur passe en arrière-plan et le
+  navigateur ralentit ses timers), le serveur de l'éditeur pouvait s'arrêter
+  (« Aucun ping depuis 15 s ») → au retour, export/validation impossibles et
+  travail perdu.
+
 ## [1.11.0] — 2026-06-18
 
 ### Ajouté

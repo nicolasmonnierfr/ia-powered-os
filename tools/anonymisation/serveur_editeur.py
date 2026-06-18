@@ -29,6 +29,9 @@ Routes :
     POST /api/ouvrir-tagueur -> relance le tagueur (serveur_tagueur.py) sur
                               l'entretien, positionne sur le terme a corriger
                               (?find=), pour editer le texte du transcript.
+    POST /api/reidentifier -> relance detecter.py sur le transcript (corrige) et
+                              reecrit le .etat.json (extraits a jour + nouveaux
+                              alias). Manuel, apres une correction de texte.
 """
 
 import argparse
@@ -46,7 +49,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, quote
 
-GRACE_SEC = 15.0
+GRACE_SEC = 60.0   # tolere le ralentissement des timers d'un onglet en arriere-plan
+                   # (ex. pendant une correction dans le tagueur ouvert en parallele)
 CHECK_EVERY = 3.0
 
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac",
@@ -253,7 +257,53 @@ def make_handler(etat: Etat):
                 return self._export()
             if path == "/api/ouvrir-tagueur":
                 return self._ouvrir_tagueur()
+            if path == "/api/reidentifier":
+                return self._reidentifier()
             self._json(404, {"error": "not found"})
+
+        def _reidentifier(self):
+            """Relance la DETECTION (detecter.py) sur le transcript courant et
+            REECRIT le .etat.json : candidats rafraichis depuis le transcript
+            CORRIGE (extraits a jour) + tout NOUVEL alias eventuel. Declenche
+            manuellement par l'editeur apres une correction de texte (bouton).
+            NB : reecrire le .etat.json efface la trace de validation -> il faut
+            re-exporter la memoire pour re-valider (coherent : le transcript a
+            change)."""
+            etat_path = etat.etat_path
+            try:
+                data = json.loads(etat_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                return self._json(500, {"error": f".etat.json illisible : {e}"})
+            entretien = etat_path.parent.parent
+            tdir = (data.get("transcript_dir") or "").strip()
+            tname = (data.get("transcript") or "").strip()
+            if not tname:
+                return self._json(400, {"error": "transcript inconnu dans .etat.json"})
+            transcript = (entretien / tdir / tname) if tdir else (entretien / tname)
+            if not transcript.is_file():
+                return self._json(404, {"error": f"transcript introuvable : {transcript}"})
+            repo = Path(__file__).resolve().parents[2]
+            detecter = repo / "tools" / "anonymisation" / "detecter.py"
+            if not detecter.is_file():
+                return self._json(500, {"error": "detecter.py introuvable"})
+            cmd = [sys.executable, str(detecter), str(transcript), "--out", str(etat_path)]
+            if etat.memoire_path.is_file():
+                cmd += ["--memoire", str(etat.memoire_path)]
+            ign = repo / "config" / "ignorer_global.json"
+            if ign.is_file():
+                cmd += ["--ignorer-global", str(ign)]
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(entretien))
+            except OSError as e:
+                return self._json(500, {"error": f"lancement detecter.py : {e}"})
+            if r.returncode != 0:
+                return self._json(500, {"error": f"detecter.py code {r.returncode}",
+                                        "detail": (r.stderr or "")[-600:]})
+            try:
+                n = len(json.loads(etat_path.read_text(encoding="utf-8")).get("candidats", []))
+            except (OSError, ValueError):
+                n = None
+            return self._json(200, {"ok": True, "candidats": n})
 
         def _ouvrir_tagueur(self):
             """Relance le tagueur sur l'entretien, positionne sur le terme a

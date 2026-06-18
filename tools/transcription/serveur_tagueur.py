@@ -52,7 +52,8 @@ MIME_AUDIO = {
     ".mkv": "video/x-matroska", ".webm": "audio/webm", ".flac": "audio/flac",
     ".ogg": "audio/ogg", ".aac": "audio/aac", ".wma": "audio/x-ms-wma", ".opus": "audio/opus",
 }
-GRACE_SEC = 15.0          # arret si pas de ping pendant ce delai
+GRACE_SEC = 60.0          # arret si pas de ping pendant ce delai (60s : tolere le
+                          # ralentissement des timers d'un onglet en arriere-plan)
 CHECK_EVERY = 3.0         # frequence de verification du heartbeat
 
 
