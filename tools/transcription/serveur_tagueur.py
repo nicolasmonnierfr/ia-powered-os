@@ -15,12 +15,22 @@ Ctrl+C dans la console fonctionne aussi.
 Usage (lance par taguer.ps1 depuis le dossier d'entretien) :
     python serveur_tagueur.py --root "<dossier_entretien>" --tagger "<chemin tagger.html>" [--port 8765]
 
+Deux VUES coherentes (audio + transcript sur la MEME timeline), selectionnables
+via ?vue= (le tagueur bascule de l'une a l'autre) :
+  - "edition"  (defaut) : audio NON coupe (racine) + etat d'edition complet
+    (2_coupe/<stem>.edition.json, parties cachees conservees) si present, sinon
+    .srt brut. Pour reprendre/ajuster le tagging et le plan de coupe.
+  - "finalise"          : audio COUPE + .srt coupe (2_coupe), tous deux recales.
+    Dispo seulement quand l'audio coupe existe (apres `ia couper`).
+Garantit l'absence de decalage : jamais un .srt coupe joue contre l'audio non coupe.
+
 Routes :
     GET  /                      -> tagger.html (mode serveur)
-    GET  /api/manifest          -> {audio, srt} : fichiers detectes dans le dossier
-    GET  /api/audio             -> flux de l'audio (racine)
-    GET  /api/srt               -> texte du .srt (1_transcription/ sinon racine)
-    POST /api/export            -> ecrit plan + srt + txt dans 2_coupe/
+    GET  /api/manifest[?vue=]   -> {vue, vues, audio, srt, etat, ...} de la vue
+    GET  /api/audio[?vue=]      -> flux de l'audio de la vue
+    GET  /api/srt[?vue=]        -> texte du .srt de la vue
+    GET  /api/etat[?vue=]       -> JSON de l'etat d'edition (.edition.json, vue edition)
+    POST /api/export            -> ecrit plan + srt + txt + edition.json dans 2_coupe/
     POST /api/ping              -> heartbeat (garde le serveur en vie)
 """
 
@@ -34,7 +44,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse, quote, parse_qs
 
 AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac", ".ogg", ".aac", ".wma", ".opus"}
 MIME_AUDIO = {
@@ -73,39 +83,99 @@ def audio_reference(root: Path):
     return audios[0].name if audios else None
 
 
-def trouver_srt(root: Path):
-    # Priorite a l'etat le PLUS AVANCE : 2_coupe (tague + coupe, vrais noms) ->
-    # 1_transcription (brut, etiquettes locales) -> racine. Ainsi, rouvrir le
-    # tagueur reprend la derniere version connue (correction de texte sans tout
-    # refaire), au lieu de repartir du transcript brut.
-    for sub in ("2_coupe", "1_transcription"):
-        d = root / sub
-        if d.is_dir():
-            for f in sorted(d.iterdir()):
-                if f.is_file() and f.suffix.lower() == ".srt":
-                    return f
+def _srt_coupe(root: Path):
+    """.srt COUPE (timecodes recales) dans 2_coupe/, sinon None."""
+    d = root / "2_coupe"
+    if d.is_dir():
+        for f in sorted(d.iterdir()):
+            if f.is_file() and f.suffix.lower() == ".srt":
+                return f
+    return None
+
+
+def _srt_brut(root: Path):
+    """.srt ORIGINAL (timecodes de l'audio source) : 1_transcription/, sinon racine."""
+    d = root / "1_transcription"
+    if d.is_dir():
+        for f in sorted(d.iterdir()):
+            if f.is_file() and f.suffix.lower() == ".srt":
+                return f
     for f in sorted(root.iterdir()):
         if f.is_file() and f.suffix.lower() == ".srt":
             return f
     return None
 
 
-def trouver_audio(root: Path):
-    # L'audio doit correspondre au transcript servi : si on sert le .srt COUPE
-    # (2_coupe), on sert l'audio COUPE (memes timecodes) ; sinon l'audio brut.
-    srt = trouver_srt(root)
-    if srt is not None and srt.parent.name == "2_coupe":
-        d = srt.parent
-        for e in AUDIO_EXTS:
-            cand = d / (srt.stem + e)
-            if cand.is_file():
-                return cand
+def _audio_coupe(srt_coupe: Path):
+    """Audio COUPE correspondant au .srt coupe (memes timecodes), dans 2_coupe/."""
+    d = srt_coupe.parent
+    cand = next((d / (srt_coupe.stem + e) for e in AUDIO_EXTS
+                 if (d / (srt_coupe.stem + e)).is_file()), None)
+    if cand:
+        return cand
+    return next((f for f in sorted(d.iterdir())
+                 if f.is_file() and f.suffix.lower() in AUDIO_EXTS), None)
+
+
+def _audio_brut(root: Path):
+    """Audio ORIGINAL a la racine de l'entretien."""
+    return next((f for f in sorted(root.iterdir())
+                 if f.is_file() and f.suffix.lower() in AUDIO_EXTS), None)
+
+
+def _etat_edition(root: Path):
+    """Etat d'edition complet (timeline ORIGINALE, parties cachees conservees) :
+    2_coupe/<stem>.edition.json, ecrit par le tagueur a l'export. Permet de rouvrir
+    le travail en cours (flags 'cache', noms, decoupes, corrections de texte) sur
+    l'audio NON coupe et de DE-cacher des passages. (A ne pas confondre avec le
+    .etat.json de l'anonymisation, qui vit dans 3_anonymisation/.)"""
+    d = root / "2_coupe"
+    if d.is_dir():
         for f in sorted(d.iterdir()):
-            if f.is_file() and f.suffix.lower() in AUDIO_EXTS:
+            if f.is_file() and f.name.lower().endswith(".edition.json"):
                 return f
-    audios = sorted(f for f in root.iterdir()
-                    if f.is_file() and f.suffix.lower() in AUDIO_EXTS)
-    return audios[0] if audios else None
+    return None
+
+
+# Le tagueur cale la lecture audio sur les timecodes du transcript servi : un .srt
+# COUPE (recale) joue contre l'audio NON coupe produit un decalage systematique.
+# On expose donc DEUX vues coherentes (chacune : audio + transcript sur la MEME
+# timeline), et le tagueur bascule de l'une a l'autre :
+#
+#   - "edition"  : timeline ORIGINALE. Audio racine + etat d'edition complet
+#                  (.edition.json, parties cachees conservees) si present, sinon
+#                  .srt brut (1_transcription/racine). Defaut : on reprend le travail.
+#   - "finalise" : timeline COUPEE. Audio coupe + .srt coupe (2_coupe), tous deux
+#                  recales. Disponible UNIQUEMENT quand l'audio coupe existe et
+#                  n'est pas plus ancien que le .srt coupe (sinon `ia couper` n'a
+#                  pas (re)tourne -> timecodes desynchronises).
+def paire_edition(root: Path):
+    etat = _etat_edition(root)
+    return {
+        "audio": _audio_brut(root),
+        "etat":  etat,
+        "srt":   None if etat else _srt_brut(root),
+    }
+
+
+def paire_finalise(root: Path):
+    srt = _srt_coupe(root)
+    if srt is None:
+        return None
+    audio = _audio_coupe(srt)
+    if audio is None or audio.stat().st_mtime < srt.stat().st_mtime:
+        return None
+    return {"audio": audio, "etat": None, "srt": srt}
+
+
+def selection(root: Path, vue: str):
+    """Retourne (vue_effective, paire) pour la vue demandee. Repli sur 'edition'
+    si 'finalise' n'est pas disponible (audio coupe manquant/perime)."""
+    if vue == "finalise":
+        fin = paire_finalise(root)
+        if fin is not None:
+            return "finalise", fin
+    return "edition", paire_edition(root)
 
 
 def trouver_memoire(depart: Path):
@@ -179,6 +249,16 @@ def make_handler(etat: Etat):
         def _json(self, code, obj):
             self._send(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"))
 
+        def _vue(self):
+            """Vue demandee via ?vue= (edition par defaut)."""
+            qs = parse_qs(urlparse(self.path).query)
+            v = (qs.get("vue", ["edition"])[0] or "edition").lower()
+            return "finalise" if v == "finalise" else "edition"
+
+        def _sel(self):
+            """(vue_effective, paire) pour la requete courante."""
+            return selection(etat.root, self._vue())
+
         # --- GET -----------------------------------------------------------
         def do_GET(self):
             path = urlparse(self.path).path
@@ -190,6 +270,8 @@ def make_handler(etat: Etat):
                 return self._audio()
             if path == "/api/srt":
                 return self._srt()
+            if path == "/api/etat":
+                return self._etat()
             self._json(404, {"error": "not found"})
 
         def _serve_tagger(self):
@@ -200,20 +282,28 @@ def make_handler(etat: Etat):
             self._send(200, html, "text/html; charset=utf-8")
 
         def _manifest(self):
-            audio = trouver_audio(etat.root)
-            srt = trouver_srt(etat.root)
+            vue, sel = self._sel()
+            audio, srt, etatf = sel["audio"], sel["srt"], sel["etat"]
+            # Disponibilite des deux vues (pour (de)activer le bouton de bascule).
+            vues = {
+                "edition":  paire_edition(etat.root)["audio"] is not None,
+                "finalise": paire_finalise(etat.root) is not None,
+            }
             self._json(200, {
                 "root": str(etat.root),
+                "vue": vue,
+                "vues": vues,
                 "audio": audio.name if audio else None,
                 "srt": (srt.name if srt else None),
                 "srt_dir": (str(srt.parent.relative_to(etat.root)) if srt else None),
+                "etat": (etatf.name if etatf else None),
                 "locuteurs_connus": noms_locuteurs_connus(etat.root),
                 "reference": audio_reference(etat.root),
                 "reconcile": trouver_reconcile(etat.root, srt),
             })
 
         def _audio(self):
-            audio = trouver_audio(etat.root)
+            audio = self._sel()[1]["audio"]
             if not audio:
                 return self._json(404, {"error": "aucun audio a la racine"})
             ctype = MIME_AUDIO.get(audio.suffix.lower(), "application/octet-stream")
@@ -246,7 +336,7 @@ def make_handler(etat: Etat):
             self._send(200, data, ctype, extra={"Accept-Ranges": "bytes"})
 
         def _srt(self):
-            srt = trouver_srt(etat.root)
+            srt = self._sel()[1]["srt"]
             if not srt:
                 return self._json(404, {"error": "aucun .srt trouve"})
             try:
@@ -254,6 +344,18 @@ def make_handler(etat: Etat):
             except OSError as e:
                 return self._json(500, {"error": str(e)})
             self._send(200, txt.encode("utf-8"), "text/plain; charset=utf-8")
+
+        def _etat(self):
+            # Etat d'edition (.edition.json) de la vue edition : restaure tout le
+            # travail en cours (parties cachees comprises) sur l'audio non coupe.
+            etatf = self._sel()[1]["etat"]
+            if not etatf:
+                return self._json(404, {"error": "aucun etat d'edition"})
+            try:
+                txt = etatf.read_text(encoding="utf-8")
+            except OSError as e:
+                return self._json(500, {"error": str(e)})
+            self._send(200, txt.encode("utf-8"))
 
         # --- POST ----------------------------------------------------------
         def do_POST(self):

@@ -236,6 +236,10 @@
     <button class="btn" id="openDir" title="Ouvre (ou recharge) le dossier racine de l'entretien : charge l'audio + le .srt et prepare l'export vers 2_coupe">Ouvrir le dossier de l'entretien</button>
     <button class="btn btn-ghost" id="changeDir" title="Choisir un autre dossier d'entretien">Changer</button>
     <span id="dirStatus" style="font-size:12px;color:var(--ink-faint);"></span>
+    <span id="vueSwitch" style="display:none;" title="Bascule entre la version d'ÉDITION (audio non coupé + parties cachées, pour ré-éditer) et la version FINALISÉE (audio coupé + transcript recalé, relecture du livrable).">
+      <button class="btn" id="vueEdition">✏️ Édition</button>
+      <button class="btn btn-ghost" id="vueFinalise">🎬 Finalisée</button>
+    </span>
     <label class="loader">Audio <input type="file" id="audioFile" accept="audio/*,video/*"></label>
     <label class="loader">Transcription .srt <input type="file" id="srtFile" accept=".srt,.vtt,text/plain"></label>
   </div>
@@ -1317,32 +1321,100 @@
   const MODE_SERVEUR = /^https?:$/.test(location.protocol) &&
                        /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
 
-  async function serveurChargerEntretien() {
+  // Restaure l'ETAT D'EDITION complet (2_coupe/<stem>.edition.json) : tous les
+  // segments AVEC les parties cachees (cut), les noms, decoupes et corrections.
+  // Timeline ORIGINALE -> se cale sur l'audio NON coupe (aucun decalage), et on
+  // peut DE-cacher des passages avant de re-couper.
+  function loadEtat(obj) {
+    const segs = Array.isArray(obj && obj.segments) ? obj.segments : [];
+    const defNames = ["Locuteur 1", "Locuteur 2", "Locuteur 3", "Locuteur 4"];
+    names = defNames.map((d, i) => (obj.names && obj.names[i]) ? obj.names[i] : d);
+    nSpeakers = Math.min(Math.max((obj.n_speakers | 0) || 2, 2), MAX);
+    const sc = document.getElementById("speakerCount");
+    if (sc) sc.value = String(nSpeakers);
+    segments = segs.map(s => ({
+      start: +s.start,
+      end: +s.end,
+      text: s.text || "",
+      speaker: (s.speaker === null || s.speaker === undefined || s.speaker >= nSpeakers) ? (s.speaker === null || s.speaker === undefined ? null : s.speaker) : s.speaker,
+      turnStart: false,
+      edited: !!s.edited,
+      cut: !!s.cut,
+      label: s.label || null,
+    }));
+    buildControls();
+    recomputeTurns();
+    selected = segments.length ? 0 : -1;
+    lastPlaying = -1;
+    render();
+    if (selected >= 0) select(0, false);
+  }
+
+  let currentVue = "edition";   // "edition" (parties cachees, audio non coupe) | "finalise" (recale, audio coupe)
+
+  // Etat des boutons de bascule (actif + (de)activation de "Finalisée").
+  function majBoutonsVue(vue, vues) {
+    const sw = document.getElementById("vueSwitch");
+    if (!sw || !MODE_SERVEUR) return;
+    sw.style.display = "";
+    const be = document.getElementById("vueEdition");
+    const bf = document.getElementById("vueFinalise");
+    be.classList.toggle("btn-ghost", vue !== "edition");
+    bf.classList.toggle("btn-ghost", vue !== "finalise");
+    const finDispo = !!(vues && vues.finalise);
+    bf.disabled = !finDispo;
+    bf.title = finDispo
+      ? "Version FINALISÉE : audio coupé + transcript recalé (relecture du livrable)."
+      : "Version finalisée indisponible : lance « ia couper » pour produire l'audio coupé.";
+  }
+
+  async function serveurChargerEntretien(vue = "edition") {
     try {
-      const man = await (await fetch("/api/manifest")).json();
+      const q = "?vue=" + encodeURIComponent(vue);
+      const man = await (await fetch("/api/manifest" + q)).json();
+      currentVue = man.vue || "edition";
+      majBoutonsVue(currentVue, man.vues);
       locuteursConnus = man.locuteurs_connus || [];   // pre-remplissage des noms (coherence inter-entretiens)
       reconcileSuggestion = man.reconcile || null;     // pre-remplissage de la reconciliation (empreinte vocale)
       if (man.reference) { const r = document.getElementById("refName"); if (r) r.textContent = "🎧 " + man.reference; }
-      // Audio
+      const qv = "?vue=" + encodeURIComponent(currentVue);
+      // Audio (de la vue : non coupe en edition, coupe en finalise).
       if (man.audio) {
-        const blob = await (await fetch("/api/audio")).blob();
+        const blob = await (await fetch("/api/audio" + qv)).blob();
         setAudioFromBlob(blob, man.audio);
       }
-      // SRT
-      if (man.srt) {
-        const txt = await (await fetch("/api/srt")).text();
+      // Transcript : etat d'edition complet (.edition.json, parties cachees) si
+      // disponible, sinon .srt (brut en edition, coupe en finalise).
+      let transStatut;
+      if (man.etat) {
+        const obj = await (await fetch("/api/etat" + qv)).json();
+        loadEtat(obj);
+        transStatut = `état: ${man.etat}`;
+      } else if (man.srt) {
+        const txt = await (await fetch("/api/srt" + qv)).text();
         loadSrtText(txt);
+        transStatut = `srt: ${man.srt}`;
+      } else {
+        transStatut = "transcript: introuvable";
       }
       const a = man.audio ? `audio: ${man.audio}` : "audio: introuvable";
-      const s = man.srt ? `srt: ${man.srt}` : "srt: introuvable";
-      setDirStatus(`Entretien chargé (${a}, ${s})`, !!(man.audio && man.srt));
-      if (!man.audio) alert("Aucun audio trouvé à la racine du dossier d'entretien.");
-      if (!man.srt)  alert("Aucun .srt trouvé (ni dans 1_transcription\\, ni à la racine).");
+      const vlabel = currentVue === "finalise" ? "Finalisée" : "Édition";
+      setDirStatus(`Entretien chargé — ${vlabel} (${a}, ${transStatut})`, !!(man.audio && (man.etat || man.srt)));
+      if (!man.audio) alert("Aucun audio trouvé pour cette version.");
+      if (!man.etat && !man.srt) alert("Aucun transcript trouvé (ni état d'édition, ni .srt).");
       applyFindFromURL();   // saut + lecture d'un terme passe en ?find= (depuis l'editeur d'alias)
     } catch (e) {
       setDirStatus("Erreur de chargement depuis le serveur : " + (e && e.message ? e.message : e), false);
     }
   }
+
+  // Bascule Édition <-> Finalisée (recharge audio + transcript de la vue choisie).
+  document.getElementById("vueEdition").addEventListener("click", () => {
+    if (currentVue !== "edition") serveurChargerEntretien("edition");
+  });
+  document.getElementById("vueFinalise").addEventListener("click", () => {
+    if (currentVue !== "finalise") serveurChargerEntretien("finalise");
+  });
 
   // Saut vers un terme passe dans l'URL (?find=...). Utilise par l'editeur
   // d'alias pour rouvrir le tagueur PILE sur le passage a corriger. On cherche
@@ -1725,6 +1797,32 @@
     }, null, 2);
   }
 
+  // Etat d'EDITION complet sur la timeline ORIGINALE (audio NON coupe) : tous les
+  // segments AVEC les parties cachees (cut), les noms, les decoupes et les
+  // corrections de texte. Permet de rouvrir le travail en cours pour DE-cacher /
+  // re-editer sans repartir du transcript brut, et sans le decalage qu'induirait
+  // le .srt coupe (recale) joue contre l'audio non coupe. Lu par le serveur
+  // (2_coupe/<stem>.edition.json) pour la vue "edition".
+  function buildEtatJson() {
+    return JSON.stringify({
+      version: 1,
+      kind: "etat-edition-tagueur",
+      generated_at: new Date().toISOString(),
+      audio_source: audioFileName || null,   // audio ORIGINAL (vue edition)
+      n_speakers: nSpeakers,
+      names: names.slice(0, MAX),
+      segments: segments.map(s => ({
+        start: +(+s.start).toFixed(3),
+        end: +(+s.end).toFixed(3),
+        text: s.text || "",
+        speaker: (s.speaker === null || s.speaker === undefined) ? null : s.speaker,
+        cut: !!s.cut,
+        edited: !!s.edited,
+        label: s.label || null,
+      })),
+    }, null, 2);
+  }
+
   // --- Exports individuels (repli / usage ponctuel) ---
   document.getElementById("exportTxt").addEventListener("click", () => {
     if (segments.length === 0) return;
@@ -1760,6 +1858,12 @@
 
   document.getElementById("exportAll").addEventListener("click", async () => {
     if (segments.length === 0) { alert("Charge d'abord une transcription."); return; }
+    // On n'exporte QUE depuis la vue d'edition (timeline originale) : exporter
+    // depuis la vue finalisee (deja coupee) recouperait un montage deja coupe.
+    if (currentVue === "finalise") {
+      alert("Tu es sur la version FINALISÉE (déjà coupée).\nBascule sur « ✏️ Édition » pour modifier le plan de coupe puis ré-exporter.");
+      return;
+    }
     if (!ensureNamed()) return;
     const txt = buildTxt();
     const srt = buildSrt();
@@ -1770,13 +1874,14 @@
       ["plan_de_coupe.json", plan],
       [`${stem}_coupe.srt`, srt],
       [`${stem}_coupe.txt`, txt],
+      [`${stem}.edition.json`, buildEtatJson()],   // etat d'edition (parties cachees) -> vue "edition" a la reouverture
     ];
 
     // Cas privilegie 1 : mode serveur -> POST direct, ecriture dans 2_coupe/.
     if (MODE_SERVEUR) {
       try {
         await serveurExporter(files);
-        alert(`Exporté dans 2_coupe\\ :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt`);
+        alert(`Exporté dans 2_coupe\\ :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt\n- ${stem}.edition.json`);
         return;
       } catch (e) {
         alert("Export via le serveur impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement.");
@@ -1797,7 +1902,7 @@
       try {
         const coupe = await dirHandle.getDirectoryHandle("2_coupe", { create: true });
         for (const [name, content] of files) await writeFileInDir(coupe, name, content);
-        alert(`Exporté dans 2_coupe\\ :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt`);
+        alert(`Exporté dans 2_coupe\\ :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt\n- ${stem}.edition.json`);
         return;
       } catch (e) {
         alert("Ecriture dans 2_coupe impossible (" + (e && e.message ? e.message : e) + ").\nRepli : téléchargement classique.");
@@ -1807,7 +1912,7 @@
       try {
         const dir = await window.showDirectoryPicker({ mode: "readwrite" });
         for (const [name, content] of files) await writeFileInDir(dir, name, content);
-        alert(`Exporté dans le dossier choisi :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt`);
+        alert(`Exporté dans le dossier choisi :\n- plan_de_coupe.json\n- ${stem}_coupe.srt\n- ${stem}_coupe.txt\n- ${stem}.edition.json`);
         return;
       } catch (e) {
         if (e && e.name === "AbortError") return;

@@ -47,6 +47,7 @@ tu ne le quittes plus. Les commandes créent et remplissent les sous-dossiers :
     │   └── entretien_dupont.srt
     ├── 2_coupe/                      ia taguer + ia couper
     │   ├── plan_de_coupe.json
+    │   ├── entretien_dupont.edition.json   état d'édition (parties cachées, audio non coupé)
     │   ├── entretien_dupont_coupe.m4a
     │   ├── entretien_dupont_coupe.srt
     │   └── entretien_dupont_coupe.txt
@@ -79,9 +80,19 @@ ia taguer
 
 - Ouvre le tagueur dans Chrome avec l'audio (racine) et le `.srt`
   (`1_transcription\`) **déjà chargés**.
-- Tu identifies les locuteurs et marques les passages à couper.
+- Tu identifies les locuteurs et marques les passages à couper (🙈 « Cacher »,
+  réversible).
 - Bouton **« Exporter vers 2_coupe »** : écrit `plan_de_coupe.json` +
-  `..._coupe.srt` + `..._coupe.txt`, cohérents, directement dans `2_coupe\`.
+  `..._coupe.srt` + `..._coupe.txt` (recalés, **sans** les parties cachées) **et**
+  `....edition.json` (état d'édition complet, **avec** les parties cachées, sur la
+  timeline de l'audio non coupé), cohérents, directement dans `2_coupe\`.
+- **Deux versions à la réouverture** (bouton **✏️ Édition / 🎬 Finalisée** en
+  haut) :
+  - **Édition** (par défaut) : audio **non coupé** + transcript **avec les parties
+    cachées** → tu reprends le travail, tu peux **dé-cacher** et réajuster le plan,
+    sans décalage.
+  - **Finalisée** : audio **coupé** + transcript **recalé** → relecture du livrable.
+    Disponible une fois `ia couper` passé.
 - Le serveur local s'arrête **quand tu fermes l'onglet** (ou Ctrl+C dans la
   fenêtre PowerShell).
 

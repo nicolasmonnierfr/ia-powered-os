@@ -9,6 +9,34 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.10.0] — 2026-06-18
+
+### Ajouté
+- **Tagueur — deux versions à la réouverture (édition / finalisée)** : un bouton
+  **✏️ Édition / 🎬 Finalisée** bascule, sans relancer, entre :
+  - **Édition** (défaut) : audio **non coupé** + transcript **avec les parties
+    cachées** (état d'édition complet) — pour reprendre le tagging, **dé-cacher**
+    et réajuster le plan de coupe, **sans décalage** ;
+  - **Finalisée** : audio **coupé** + `.srt` **recalé** — relecture du livrable
+    (disponible une fois `ia couper` passé, l'audio coupé existant et à jour).
+- **État d'édition persistant** : l'export du tagueur écrit désormais aussi
+  `2_coupe/<stem>.edition.json` (tous les segments avec `cut`/`edited`/locuteur/
+  texte et les noms, sur la timeline originale). La réouverture en mode Édition le
+  recharge → le travail de tagging (y compris les parties cachées) survit à la
+  fermeture, au lieu de repartir du transcript brut. (Distinct du `.etat.json`
+  d'anonymisation, qui vit dans `3_anonymisation/`.)
+- Serveur du tagueur (`serveur_tagueur.py`) : routes paramétrées par vue
+  (`/api/manifest|audio|srt?vue=`) + nouvelle route `/api/etat`. Le manifest
+  expose la vue courante et la disponibilité de chaque vue.
+
+### Corrigé
+- **Décalage SRT/audio à la réouverture du tagueur après un plan de coupe** : le
+  serveur servait le `.srt` **coupé** (timecodes recalés) avec l'audio **non
+  coupé** quand l'audio coupé manquait (export fait, `ia couper` pas encore lancé)
+  ou était périmé — le tagueur calant la lecture sur les timecodes du `.srt`, tout
+  était décalé. La sélection est désormais **appariée par timeline** : jamais un
+  `.srt` coupé contre l'audio non coupé.
+
 ## [1.9.1] — 2026-06-18
 
 ### Corrigé
