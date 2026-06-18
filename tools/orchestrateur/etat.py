@@ -271,6 +271,11 @@ def etat_entretien(d: Path):
         "tag": tag,
         "coupe": coupe,
         "analyse": analyse,
+        # Deux etapes DISTINCTES (auto vs humaine), derivees de `analyse` :
+        #   - identification (detection NER, auto) : faite des qu'un .etat.json existe ;
+        #   - validation (analyse humaine)         : faite quand validation.faite est posee.
+        "identification": "fait" if analyse in ("detecte", "valide") else "a_faire",
+        "validation": "valide" if analyse == "valide" else "a_faire",
         "anonymisation": anonymisation,
         "action": action,
         "auto": meta["auto"],
@@ -320,15 +325,12 @@ def rendre_entretien(e) -> str:
     """Vue DETAILLEE d'un seul entretien (pour `ia etat`), au niveau du workflow
     courant : l'etat 'Analyse' est ici eclate en Identification (auto, detection
     NER) + Analyse/validation (humaine)."""
-    an = e["analyse"]
-    identification = "fait" if an in ("detecte", "valide") else "a_faire"
-    validation = "valide" if an == "valide" else "a_faire"
     etapes = [
         ("Transcription",           _cell_trans(e)),
         ("Tag (locuteurs)",         _cell(e["tag"])),
         ("Coupe (audio)",           _cell(e["coupe"])),
-        ("Identification (auto)",   _cell(identification)),
-        ("Analyse / validation",    _cell(validation)),
+        ("Identification (auto)",   _cell(e["identification"])),
+        ("Analyse / validation",    _cell(e["validation"])),
         ("Anonymisation",           _cell(e["anonymisation"])),
     ]
     w = max(len(n) for n, _ in etapes)
@@ -343,7 +345,7 @@ def rendre_entretien(e) -> str:
     lignes.append(f"  Prochaine action : {prochaine}"
                   + (f"  [{qui}]" if qui != "-" else "") + note)
     lignes.append("")
-    lignes.append("  Legende : OK=fait  --=a faire  ..=en cours  ~~=detecte  !!=echec")
+    lignes.append("  Legende : OK=fait  --=a faire  ..=en cours  !!=echec")
     lignes.append("")
     return "\n".join(lignes)
 
@@ -367,7 +369,7 @@ def rendre_table(rapport) -> str:
         lignes.append("  (aucun entretien trouve dans ce perimetre)")
         return "\n".join(lignes)
 
-    cols = ["Entretien", "Transcr", "Tag", "Coupe", "Analyse", "Anonym", "Prochaine action (qui)"]
+    cols = ["Entretien", "Transcr", "Tag", "Coupe", "Identif", "Analyse", "Anonym", "Prochaine action (qui)"]
     rows = []
     for e in ents:
         prochaine = ACTIONS[e["action"]]["label"]
@@ -377,7 +379,8 @@ def rendre_table(rapport) -> str:
             _cell_trans(e),
             _cell(e["tag"]),
             _cell(e["coupe"]),
-            _cell(e["analyse"]),
+            _cell(e["identification"]),
+            _cell(e["validation"]),
             _cell(e["anonymisation"]),
             f"{prochaine}" + (f"  [{qui}]" if qui != "-" else ""),
         ])
@@ -393,7 +396,7 @@ def rendre_table(rapport) -> str:
     humain = [e for e in ents if e["auto"] is False]
     termine = [e for e in ents if e["action"] == "termine"]
     lignes.append("")
-    lignes.append(f"  Legende : OK=fait  --=a faire  ..=en cours  ~~=detecte (analyse non validee)  !!=echec")
+    lignes.append(f"  Legende : OK=fait  --=a faire  ..=en cours  !!=echec   (Identif=detection NER auto ; Analyse=validation humaine)")
     lignes.append(f"  Auto en attente : {len(auto)}   |   Te revient : {len(humain)}   |   Termine : {len(termine)}/{len(ents)}")
     if auto:
         lignes.append("  -> Automatisable : " + ", ".join(f"{e['dossier']} ({e['action']})" for e in auto))
@@ -412,15 +415,17 @@ def rendre_md(rapport) -> str:
     else:
         out.append("- **Memoire client** : _aucune_ (creee a la 1re validation d'analyse)")
     out.append("")
-    out.append("| Entretien | Transcr. | Tag | Coupe | Analyse | Anonym. | Prochaine action | Qui |")
-    out.append("|---|:--:|:--:|:--:|:--:|:--:|---|:--:|")
+    out.append("| Entretien | Transcr. | Tag | Coupe | Identif. | Analyse | Anonym. | Prochaine action | Qui |")
+    out.append("|---|:--:|:--:|:--:|:--:|:--:|:--:|---|:--:|")
     for e in ents:
-        out.append("| {dossier} | {tr} | {tag} | {co} | {an} | {anon} | {act} | {qui} |".format(
+        out.append("| {dossier} | {tr} | {tag} | {co} | {id} | {va} | {anon} | {act} | {qui} |".format(
             dossier=e["dossier"], tr=_cell_trans(e), tag=_cell(e["tag"]),
-            co=_cell(e["coupe"]), an=_cell(e["analyse"]), anon=_cell(e["anonymisation"]),
+            co=_cell(e["coupe"]), id=_cell(e["identification"]), va=_cell(e["validation"]),
+            anon=_cell(e["anonymisation"]),
             act=ACTIONS[e["action"]]["label"], qui=e["qui"]))
     out.append("")
-    out.append("> Legende : OK=fait · --=a faire · ..=en cours · ~~=detecte (analyse non validee) · !!=echec")
+    out.append("> Legende : OK=fait · --=a faire · ..=en cours · !!=echec — "
+               "**Identif.** = detection NER (auto) ; **Analyse** = validation humaine")
     out.append("")
     return "\n".join(out)
 

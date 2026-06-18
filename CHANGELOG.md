@@ -9,6 +9,18 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.14.0] — 2026-06-18
+
+### Modifié
+- **Tableau d'avancement (`ia tableau` + `ETAT.md`) : « Identification » et
+  « Analyse » dissociées en deux colonnes.** L'identification (détection NER,
+  automatique — faite dès qu'un `.etat.json` existe) et l'analyse (validation
+  humaine — faite quand la mémoire est exportée) étaient fondues dans une seule
+  colonne « Analyse » (`~~` détecté / `OK` validé). Elles ont désormais leur
+  propre colonne **Identif.** et **Analyse** (chacune `OK`/`--`), alignées sur la
+  vue détaillée de `ia etat`. Le JSON expose deux nouveaux champs
+  `identification` et `validation` (le champ `analyse` est conservé).
+
 ## [1.13.0] — 2026-06-18
 
 ### Ajouté
