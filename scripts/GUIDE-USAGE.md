@@ -54,6 +54,7 @@ tu ne le quittes plus. Les commandes créent et remplissent les sous-dossiers :
     └── 3_anonymisation/             ia anonymiser
         ├── entretien_dupont_coupe.etat.json
         ├── entretien_dupont_coupe_anonymise.srt
+        ├── entretien_dupont_coupe_anonymise.txt    lisible (pour analyse IA)
         └── entretien_dupont_coupe_rapport.txt
 ```
 

@@ -9,6 +9,20 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.13.0] — 2026-06-18
+
+### Ajouté
+- **Anonymisation : sortie `.txt` lisible en plus du `.srt`** (`appliquer.py`). En
+  plus de `<nom>_anonymise.srt`, la passe produit `<nom>_anonymise.txt` : le
+  transcript **regroupé par locuteur, sans indices ni timecodes** — bien plus
+  facile à analyser pour une IA. Dérivé du `.srt` anonymisé (mêmes contenu et
+  remplacements). Produit quand l'entrée est un `.srt`.
+
+### Corrigé / robustesse
+- **`appliquer.py` : crash possible sur un `print` accentué/emoji** (« ⚠ ») quand
+  la console est en cp1252 (`UnicodeEncodeError`) — purement cosmétique mais qui
+  faisait sortir le script en erreur. stdout/stderr sont désormais forcés en UTF-8.
+
 ## [1.12.0] — 2026-06-18
 
 ### Ajouté

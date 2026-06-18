@@ -4,7 +4,10 @@ appliquer.py — APPLICATION finale du pipeline d'anonymisation (local).
 
 Prend un transcript taggé + la mémoire client (`memoire_client.json`) issue de
 l'éditeur HTML, et produit :
-  - <nom>_anonymise.<ext>      : transcript anonymisé (à envoyer à l'IA)
+  - <nom>_anonymise.<ext>      : transcript anonymisé (même format que l'entrée)
+  - <nom>_anonymise.txt        : version LISIBLE (regroupée par locuteur, sans
+                                 timecodes) — plus facile à analyser pour une IA
+                                 (produite quand l'entrée est un .srt)
   - memoire_client.json        : mémoire mise à jour (À GARDER EN LOCAL)
   - <nom>_rapport.txt          : rapport de relecture (qui a été remplacé)
 
@@ -36,6 +39,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import memoire as M  # noqa: E402
+
+
+# Console Windows en cp1252 : un print accentué/emoji (ex. « ⚠ ») planterait
+# (UnicodeEncodeError) et ferait échouer l'anonymisation pour une raison purement
+# cosmétique. On force stdout/stderr en UTF-8 (sans effet si déjà le cas).
+for _flux in (sys.stdout, sys.stderr):
+    try:
+        _flux.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 
 def die(msg, code=1):
@@ -108,6 +121,56 @@ def anonymize_transcript(path, replace_in, generiques):
         return "\n".join(out)
 
 
+def _srt_time_to_sec(t):
+    m = re.match(r"\s*(\d+):(\d+):(\d+)[,.](\d+)", t)
+    if not m:
+        return None
+    h, mi, s, ms = (int(x) for x in m.groups())
+    return h * 3600 + mi * 60 + s + ms / 1000.0
+
+
+def _fmt_mmss(t):
+    if t is None:
+        return None
+    h, m, s = int(t // 3600), int((t % 3600) // 60), int(t % 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def srt_vers_txt(srt_text):
+    """Transforme un .srt (déjà anonymisé) en transcript LISIBLE : regroupé par
+    tour de parole, sans indices ni timecodes parasites (une ligne d'en-tête
+    [Locuteur] (m:ss) par changement de locuteur). Bien plus facile à analyser
+    pour une IA. Même rendu que le .txt du tagueur."""
+    out, cur = "", object()   # sentinelle != de tout locuteur (y compris None)
+    for chunk in srt_text.replace("\r", "").split("\n\n"):
+        lines = [l for l in chunk.split("\n") if l.strip() != ""]
+        if not lines:
+            continue
+        start = None
+        body = []
+        for l in lines:
+            if re.fullmatch(r"\s*\d+\s*", l):
+                continue
+            if "-->" in l:
+                start = _srt_time_to_sec(l.split("-->")[0])
+                continue
+            body.append(l)
+        if not body:
+            continue
+        text = " ".join(body).strip()
+        m = re.match(r"^\s*\[([^\]]+)\]\s*(.*)$", text)
+        speaker = m.group(1).strip() if m else "NON_AFFECTE"
+        if m:
+            text = m.group(2).strip()
+        if speaker != cur:
+            tc = _fmt_mmss(start)
+            out += f"\n[{speaker}]" + (f" ({tc})" if tc else "") + "\n"
+            cur = speaker
+        if text:
+            out += text + " "
+    return out.strip() + "\n"
+
+
 # ---------------------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser(description="Applique l'anonymisation et produit les sorties.")
@@ -175,11 +238,22 @@ def main():
     out_transcript.write_text(anonymized, encoding="utf-8")
     M.ecrire_memoire(out_memoire, mem)
 
+    # Sortie LISIBLE en plus du .srt : transcript regroupé par locuteur, sans
+    # indices/timecodes — bien plus facile à analyser pour une IA. Produit
+    # uniquement quand l'entrée est un .srt (si l'entrée est déjà un .txt,
+    # out_transcript EST déjà ce format).
+    out_txt = None
+    if tpath.suffix.lower() == ".srt" or "-->" in anonymized:
+        out_txt = outdir / f"{tpath.stem}_anonymise.txt"
+        out_txt.write_text(srt_vers_txt(anonymized), encoding="utf-8")
+
     # Rapport de relecture
     lines = ["RAPPORT D'ANONYMISATION", "=" * 40,
              f"Transcript      : {tpath.name}",
-             f"Sortie          : {out_transcript.name}",
-             f"Client          : {mem.get('client') or '(non précisé)'}",
+             f"Sortie (.srt)   : {out_transcript.name}"]
+    if out_txt:
+        lines.append(f"Sortie (.txt)   : {out_txt.name}   (lisible, pour analyse IA)")
+    lines += [f"Client          : {mem.get('client') or '(non précisé)'}",
              f"Mémoire         : {out_memoire.name}",
              f"Entités         : {len(mem['entrees'])}", "",
              "Remplacements effectués (pseudo <- variantes) :"]
@@ -197,6 +271,8 @@ def main():
     out_report.write_text("\n".join(lines), encoding="utf-8")
 
     print(f"[OK] Transcript anonymisé : {out_transcript}")
+    if out_txt:
+        print(f"[OK] Version lisible .txt : {out_txt}")
     print(f"[OK] Mémoire (LOCALE)     : {out_memoire}")
     print(f"[OK] Rapport              : {out_report}")
     total = sum(counts.values())
