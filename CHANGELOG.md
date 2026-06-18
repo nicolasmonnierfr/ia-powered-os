@@ -9,6 +9,19 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.9.1] — 2026-06-18
+
+### Corrigé
+- **Tâches planifiées cassées après une mise à jour de PowerShell** : `veille.ps1`
+  gravait le chemin **versionné** de pwsh (`...\WindowsApps\Microsoft.PowerShell_7.6.2.0_...\pwsh.exe`).
+  Quand PowerShell se met à jour (Store/MSIX), ce dossier disparaît et `wscript`
+  ne trouve plus l'exécutable → fenêtre d'erreur « chemin d'accès introuvable »
+  (`0x80070003`) à chaque tick, transcription et état figés. `Get-PsExe` utilise
+  désormais en priorité l'**alias d'exécution stable**
+  `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe` (indépendant de la version),
+  avec repli sur `(Get-Command pwsh).Source` puis `powershell`. Réinstaller les
+  tâches (`.\veille.ps1 <perimetre> -Installer`) pour appliquer le correctif.
+
 ## [1.9.0] — 2026-06-17
 
 ### Ajouté

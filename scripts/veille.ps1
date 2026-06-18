@@ -49,7 +49,19 @@ $orchestrer    = Join-Path $PSScriptRoot "orchestrer.ps1"
 $lanceurTache  = Join-Path $PSScriptRoot "_tache.ps1"
 $lanceurEtat   = Join-Path $PSScriptRoot "_etat_tache.ps1"
 $shimSilencieux = Join-Path $PSScriptRoot "_silent.vbs"
-function Get-PsExe { if (Get-Command pwsh -ErrorAction SilentlyContinue) { (Get-Command pwsh).Source } else { (Get-Command powershell).Source } }
+# Resout l'executable PowerShell pour la tache planifiee. ATTENTION : sur une
+# installation Store/MSIX, (Get-Command pwsh).Source pointe vers un chemin
+# WindowsApps VERSIONNE (ex. ...Microsoft.PowerShell_7.6.2.0_x64...\pwsh.exe) qui
+# DISPARAIT a chaque mise a jour de pwsh -> le chemin grave dans la tache devient
+# introuvable (wscript : "chemin d'acces introuvable", 0x80070003). On prefere
+# donc l'alias d'execution %LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe, stable
+# d'une version a l'autre.
+function Get-PsExe {
+    $alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\pwsh.exe"
+    if (Test-Path -LiteralPath $alias) { return $alias }
+    if (Get-Command pwsh -ErrorAction SilentlyContinue) { return (Get-Command pwsh).Source }
+    return (Get-Command powershell).Source
+}
 
 # Enregistre une tache planifiee : repetition indefinie toutes les N min, logon
 # interactif, SANS blocage batterie (#19). Avec -Silencieux : lance via
