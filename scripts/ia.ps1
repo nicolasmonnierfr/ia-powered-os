@@ -16,7 +16,10 @@
 #   ia etat              # affiche l'avancement de l'entretien courant
 #   ia tableau [perim]   # vue globale de tous les entretiens d'un perimetre
 #   ia orchestrer [perim]# une passe : tableau + execution de l'automatisable
-#   ia veille [perim]    # surveillance continue (boucle / tache planifiee)
+#   ia veille [perim]    # surveillance continue (boucle terminal)
+#   ia veille -Inscrire <dossier>     # inscrit un dossier au scan de la tache planifiee
+#   ia veille -Desinscrire <dossier>  # retire un dossier du scan
+#   ia veille -Lister                 # liste les dossiers inscrits
 #   ia setenv            # active le venv dans la session courante (python/pip)
 #   ia aide              # affiche cette aide
 #
@@ -51,7 +54,10 @@ function Show-Aide {
     Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement detaille de l'entretien courant (workflow complet)"
     Write-Host "  ia tableau [perimetre]           " -NoNewline -ForegroundColor Green; Write-Host "Vue globale de tous les entretiens"
     Write-Host "  ia orchestrer [perimetre]        " -NoNewline -ForegroundColor Green; Write-Host "Une passe : tableau + execute l'automatisable"
-    Write-Host "  ia veille [perimetre]            " -NoNewline -ForegroundColor Green; Write-Host "Surveillance continue (boucle / tache planifiee)"
+    Write-Host "  ia veille [perimetre]            " -NoNewline -ForegroundColor Green; Write-Host "Surveillance continue (boucle terminal)"
+    Write-Host "  ia veille -Inscrire <dossier>    " -NoNewline -ForegroundColor Green; Write-Host "Inscrit un dossier au scan de la tache planifiee"
+    Write-Host "  ia veille -Desinscrire <dossier> " -NoNewline -ForegroundColor Green; Write-Host "Retire un dossier du scan"
+    Write-Host "  ia veille -Lister                " -NoNewline -ForegroundColor Green; Write-Host "Liste les dossiers inscrits"
     Write-Host "  ia setenv                        " -NoNewline -ForegroundColor Green; Write-Host "Active le venv (python/pip a la main)"
     Write-Host "  ia aide                          " -NoNewline -ForegroundColor Green; Write-Host "Cette aide"
     Write-Host ""

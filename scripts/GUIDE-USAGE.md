@@ -246,7 +246,8 @@ Active le venv dans la session courante.
 | `ia etat` | avancement de l'entretien **courant** | lit `entretien.json` |
 | `ia tableau [périm]` | vue **globale** de tous les entretiens | tableau console |
 | `ia orchestrer [périm]` | une passe : tableau + exécute l'automatisable | `ETAT.md` + livrables |
-| `ia veille [périm]` | surveillance **continue** (boucle / tâche planifiée) | — |
+| `ia veille [périm]` | surveillance **continue** (boucle terminal) | — |
+| `ia veille -Inscrire/-Desinscrire/-Lister` | gère les dossiers scannés par la tâche planifiée | `config\perimetres.json` |
 | `ia setenv` | active le venv | session courante |
 | `ia aide` | liste les commandes | — |
 
@@ -306,17 +307,45 @@ la mémoire par projet ne mente jamais.
 ### `ia veille` — surveillance continue (les deux modes)
 
 ```powershell
-# 1) Boucle terminal (vision live ; Ctrl+C pour arrêter)
-ia veille                       # tick toutes les 60 s
+# 1) Boucle terminal (vision live ; Ctrl+C pour arrêter) — sur UN périmètre
+ia veille                       # tick toutes les 60 s, périmètre = dossier courant
+ia veille "D:\...\Interviews"   # périmètre explicite
 ia veille -Intervalle 30 -Clair # 30 s, écran rafraîchi
 
 # 2) Tâche planifiée Windows (filet de sécurité, survit au redémarrage)
-ia veille -Installer                  # tick toutes les 10 min
-ia veille -Installer -IntervalleMin 15
-ia veille -Statut
-ia veille -Desinstaller
+ia veille -Inscrire "D:\...\Interviews"    # inscrit un dossier (installe les tâches au besoin)
+ia veille -Lister                          # dossiers inscrits
+ia veille -Desinscrire "D:\...\Interviews" # retire un dossier du scan
+ia veille -Statut                          # état des tâches + registre
+ia veille -Desinstaller                    # retire les tâches planifiées
 ```
 
 Boucle et tâche planifiée partagent le **même tick** (`ia orchestrer`) et le
 **même verrou de transcription** : les activer toutes les deux est redondant
 mais **sans danger** (jamais deux transcriptions en parallèle).
+
+#### Le registre des répertoires surveillés
+
+Les tâches planifiées ne ciblent **plus un seul dossier figé** : elles scannent à
+chaque tick **tous les répertoires inscrits** dans un registre local,
+`config\perimetres.json` (gitignoré — il contient des chemins de missions).
+
+**La surveillance suit le registre** : les tâches planifiées sont actives **si et
+seulement si** au moins un répertoire est inscrit. Tu n'as donc qu'à inscrire /
+désinscrire des dossiers ; l'activation et l'arrêt des tâches sont **automatiques**.
+
+- **`ia veille -Inscrire <dossier>`** ajoute un répertoire au registre. Si le
+  registre était **vide** (surveillance arrêtée), les deux tâches planifiées sont
+  **activées automatiquement** ; si elles tournaient déjà, le nouveau dossier est
+  simplement pris au tick suivant — **sans réinstallation**.
+- **`ia veille -Desinscrire <dossier>`** le retire. Si c'était le **dernier**
+  répertoire inscrit, les tâches planifiées sont **désinstallées automatiquement**
+  (plus rien à scanner) ; elles se réactiveront au prochain `-Inscrire`.
+- **`ia veille -Lister`** (ou `ia veille -Statut`) affiche les répertoires
+  inscrits, en signalant d'un `!` ceux devenus introuvables sur le disque.
+
+> `ia veille -Installer [dossier]` / `-Desinstaller` restent disponibles pour
+> forcer le cycle de vie des tâches à la main (un dossier passé à `-Installer` est
+> inscrit au passage). Chaque tâche scanne chaque périmètre **l'un après
+> l'autre** ; le verrou de transcription garantit qu'une seule transcription
+> tourne à la fois, tous périmètres confondus.

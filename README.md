@@ -68,7 +68,9 @@ Au niveau d'un **périmètre** (dossier contenant plusieurs entretiens) :
   automatiquement** ce qui peut l'être (couper, anonymiser ; transcrire en
   arrière-plan, sérialisé). Synchronise au passage les `entretien.json` ;
 - `ia veille` — surveillance **continue** : boucle terminal **ou** tâche
-  planifiée Windows (`-Installer` / `-Desinstaller` / `-Statut`).
+  planifiée Windows. La tâche scanne un **registre de répertoires** que l'on gère
+  avec `ia veille -Inscrire` / `-Desinscrire` / `-Lister` (cycle de vie des
+  tâches : `-Installer` / `-Desinstaller` / `-Statut`).
 
 Seules les étapes humaines (`taguer`, `analyser`) ne sont pas automatisées ;
 elles sont signalées dans le tableau.

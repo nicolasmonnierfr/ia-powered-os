@@ -7,17 +7,17 @@
 # ETAT.md a frequence rapide -> l'etat (y compris la progression "n/total" des
 # troncons, lue sur le disque par etat.py) reste toujours a jour.
 #
+# Parcourt le REGISTRE des perimetres inscrits (config\perimetres.json) et
+# regenere un ETAT.md par perimetre. -Perimetre <chemin> force UN perimetre.
+#
 # Surete : etat.py est LECTURE SEULE et n'ecrit QUE ETAT.md. Aucune ecriture de
 # entretien.json ici -> pas de course avec la tache de transcription (qui, elle,
 # ecrit entretien.json + livrables). On NE lance PAS sync.py pour la meme raison.
-#
-# Usage (par le planificateur) :
-#   _etat_tache.ps1 -Perimetre "D:\...\Interviews"
 # =============================================================================
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [string]$Perimetre
+    [string]$Perimetre
 )
 
 . "$PSScriptRoot\_commun.ps1"
@@ -30,9 +30,15 @@ $repo   = Get-RepoHome
 $python = Get-PythonExe -RepoHome $repo
 $etatPy = Get-Tool -RepoHome $repo "tools\orchestrateur\etat.py"
 
-if (-not (Test-Path -LiteralPath $Perimetre)) { exit 1 }
-$perim  = (Resolve-Path -LiteralPath $Perimetre).Path
-$etatMd = Join-Path $perim "ETAT.md"
+$perims = if ($Perimetre) { @($Perimetre) } else { @(Read-Perimetres) }
+if (-not $perims -or $perims.Count -eq 0) { exit 0 }
 
-& $python $etatPy $perim --format md --out $etatMd | Out-Null
-exit $LASTEXITCODE
+$rc = 0
+foreach ($p in $perims) {
+    if (-not (Test-Path -LiteralPath $p)) { continue }
+    $perim  = (Resolve-Path -LiteralPath $p).Path
+    $etatMd = Join-Path $perim "ETAT.md"
+    & $python $etatPy $perim --format md --out $etatMd | Out-Null
+    if ($LASTEXITCODE -ne 0) { $rc = $LASTEXITCODE }
+}
+exit $rc

@@ -3,6 +3,10 @@ config/.env
 *.env
 !config/.env.example
 
+# Registre LOCAL des perimetres surveilles par `ia veille` (chemins de missions
+# client = sensibles, et propres a la machine).
+config/perimetres.json
+
 # === Données sensibles (audios, transcriptions, intermédiaires) ===
 # data/ ne contient que des intermédiaires (data/.chunks/) : tout est ignoré,
 # on conserve seulement le dossier vide via .gitkeep.

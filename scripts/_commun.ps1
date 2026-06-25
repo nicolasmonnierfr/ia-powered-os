@@ -177,6 +177,72 @@ function Find-TranscriptSource {
 }
 
 # =============================================================================
+# REGISTRE DES PERIMETRES SURVEILLES (taches planifiees `ia veille`)
+# =============================================================================
+# Les taches planifiees ne scannent plus UN perimetre grave en dur dans leur
+# action : elles lisent ce registre a chaque tick. On peut donc inscrire /
+# desinscrire un repertoire sans toucher aux taches (ia veille -Inscrire / -Desinscrire / -Lister).
+# Fichier LOCAL (chemins de missions client = sensibles) -> gitignore.
+
+function Get-PerimetresPath { return (Join-Path (Get-RepoHome) "config\perimetres.json") }
+
+function Read-Perimetres {
+    # Tableau (eventuellement vide) des chemins inscrits, tels qu'enregistres.
+    $p = Get-PerimetresPath
+    if (-not (Test-Path -LiteralPath $p)) { return @() }
+    try {
+        $data = Get-Content -LiteralPath $p -Raw -Encoding UTF8 | ConvertFrom-Json
+        return @($data.perimetres | Where-Object { $_ })
+    } catch {
+        Write-Avert "Registre des perimetres illisible ($p) : $_"
+        return @()
+    }
+}
+
+function Write-Perimetres {
+    param([string[]]$Perimetres)
+    $p   = Get-PerimetresPath
+    $dir = Split-Path -Parent $p
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $obj = [pscustomobject]@{ version = 1; perimetres = [string[]]@($Perimetres) }
+    $obj | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $p -Encoding UTF8
+}
+
+# Comparaison de chemins Windows : insensible a la casse + barre finale ignoree.
+function Test-MemeChemin {
+    param([string]$A, [string]$B)
+    return ($A.TrimEnd('\') -eq $B.TrimEnd('\'))
+}
+
+function Add-Perimetre {
+    # Inscrit un repertoire (resolu en absolu, dedoublonne). Retourne un objet
+    # { Ajoute = $true/$false ; Chemin = <absolu> }.
+    param([Parameter(Mandatory)][string]$Chemin)
+    if (-not (Test-Path -LiteralPath $Chemin -PathType Container)) {
+        throw "Repertoire introuvable : $Chemin"
+    }
+    $abs   = (Resolve-Path -LiteralPath $Chemin).Path
+    $liste = @(Read-Perimetres)
+    foreach ($e in $liste) { if (Test-MemeChemin $e $abs) { return [pscustomobject]@{ Ajoute = $false; Chemin = $abs } } }
+    $liste += $abs
+    Write-Perimetres -Perimetres $liste
+    return [pscustomobject]@{ Ajoute = $true; Chemin = $abs }
+}
+
+function Remove-Perimetre {
+    # Desinscrit un repertoire. Tolere un dossier deja supprime (pas de Resolve
+    # bloquant). Retourne { Retire = $true/$false ; Chemin ; Reste = <tableau> }.
+    param([Parameter(Mandatory)][string]$Chemin)
+    $cible = $Chemin
+    if (Test-Path -LiteralPath $Chemin) { try { $cible = (Resolve-Path -LiteralPath $Chemin).Path } catch {} }
+    $liste = @(Read-Perimetres)
+    $reste = @($liste | Where-Object { -not (Test-MemeChemin $_ $cible) })
+    $retire = ($reste.Count -lt $liste.Count)
+    if ($retire) { Write-Perimetres -Perimetres $reste }
+    return [pscustomobject]@{ Retire = $retire; Chemin = $cible; Reste = $reste }
+}
+
+# =============================================================================
 # LOGGING CENTRALISE + FICHIER PROJET (entretien.json)
 # =============================================================================
 # Deux niveaux (voir scripts/SCHEMA-entretien.md) :

@@ -9,6 +9,34 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.18.0] — 2026-06-25
+
+### Ajouté
+- **Registre de répertoires surveillés par la tâche planifiée (`ia veille`).**
+  Jusqu'ici la tâche planifiée ciblait **un seul** périmètre, **gravé en dur**
+  dans son action à l'installation (`-Perimetre`). Impossible d'en changer sans
+  réinstaller, ni d'en surveiller plusieurs. Désormais les deux tâches
+  (« Orchestrateur » et « Etat ») lisent à chaque tick un **registre local**,
+  `config\perimetres.json` (gitignoré : chemins de missions), et orchestrent
+  **chaque** répertoire inscrit. Trois nouvelles commandes :
+  - `ia veille -Inscrire <dossier>` — ajoute un répertoire ;
+  - `ia veille -Desinscrire <dossier>` — le retire ;
+  - `ia veille -Lister` — affiche les répertoires inscrits (signale d'un `!` ceux
+    devenus introuvables). `ia veille -Statut` les affiche aussi.
+- **Activation / désactivation automatiques (la surveillance suit le registre).**
+  Invariant : les tâches planifiées sont actives **ssi** au moins un répertoire est
+  inscrit. Inscrire dans un registre **vide** **installe** les deux tâches ;
+  désinscrire le **dernier** répertoire les **désinstalle**. Plus besoin de gérer
+  `-Installer` / `-Desinstaller` à la main au quotidien (ils restent disponibles
+  comme override).
+- **Rétrocompatibilité / migration.** `ia veille -Installer [dossier]` réinstalle
+  les tâches en **mode registre** (plus de chemin figé) et inscrit le dossier
+  éventuellement passé en argument. Les lanceurs `_tache.ps1` / `_etat_tache.ps1`
+  acceptent encore un `-Perimetre` explicite (override d'un run ad hoc) mais lisent
+  le registre par défaut. Chaque tâche scanne les périmètres **l'un après
+  l'autre**, le verrou de transcription garantissant une seule transcription à la
+  fois tous périmètres confondus.
+
 ## [1.17.1] — 2026-06-25
 
 ### Corrigé (documentation)
