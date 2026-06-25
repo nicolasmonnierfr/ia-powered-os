@@ -27,3 +27,22 @@ Whisper ; un 1–2 h passe en général). À évaluer comme option de
 empreinte montre ses limites sur certains entretiens (voix très proches).
 
 **Sévérité** : confort / robustesse ; non urgent (B couvre le besoin actuel).
+
+---
+
+## Industrialisation / maintenabilité
+
+### 20. Rationaliser le nommage des fonctions (numérotation / indices)
+**Contexte** : le nombre de fonctions a sensiblement augmenté (wrappers
+PowerShell `scripts/*.ps1`, helpers de `_commun.ps1`, modules Python de
+`tools/`), au point qu'il devient difficile de s'y repérer. Souhait : un schéma
+de nommage plus **lisible** — par exemple un préfixe ou un **indice** regroupant
+les fonctions par domaine / ordre (`1_`, `2_`… ou un préfixe par module), pour
+retrouver vite une fonction et son rôle.
+
+**Pistes** : convention de préfixe par couche (affichage / repo / projet /
+registre / synthèse…) ou table d'index en tête de fichier. Renommage **outillé**
+(recherche/remplacement) pour ne casser aucun appel — à sécuriser idéalement par
+un filet de tests (cf. `TODO.md` : test de bout en bout) avant de se lancer.
+
+**Sévérité** : confort / maintenabilité ; non urgent (aucun impact fonctionnel).
