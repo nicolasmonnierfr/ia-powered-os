@@ -38,6 +38,19 @@ AUDIO_EXTS = {".m4a", ".mp3", ".wav", ".mp4", ".mkv", ".webm", ".flac",
              ".ogg", ".aac", ".wma", ".opus"}
 NOM_MEMOIRE = "memoire_client.json"
 
+# --- Scan RECURSIF des perimetres -------------------------------------------
+# Un "entretien" est un sous-dossier contenant un audio. On le cherche
+# RECURSIVEMENT sous le perimetre inscrit, jusqu'a PROFONDEUR_MAX niveaux
+# (1 = enfants directs). Deux garde-fous :
+#   - on NE descend jamais dans un entretien deja identifie (ses sous-dossiers de
+#     pipeline contiennent p.ex. un *_coupe.m4a qui serait pris a tort pour un
+#     nouvel entretien) ;
+#   - on ignore les dossiers techniques (pipeline + intermediaires/outils).
+PROFONDEUR_MAX = 4
+DOSSIERS_PIPELINE = {"1_transcription", "2_coupe", "3_anonymisation"}
+DOSSIERS_IGNORES = {".chunks", ".git", "__pycache__", ".venv", "venv",
+                    "node_modules", ".idea", ".vscode"}
+
 # Etiquettes courtes + qui realise chaque action.
 ACTIONS = {
     "transcrire":  {"auto": True,  "qui": "auto", "label": "Transcrire"},
@@ -284,12 +297,43 @@ def etat_entretien(d: Path):
     }
 
 
+def collecter_entretiens(perimetre: Path, profondeur_max: int = PROFONDEUR_MAX):
+    """Dossiers d'entretien sous `perimetre` (recursif, borne a profondeur_max).
+
+    Un dossier est un entretien des qu'il contient un audio : on l'ajoute et on
+    NE descend PAS dedans. Sinon on continue a descendre jusqu'a profondeur_max
+    (1 = enfants directs). Renvoie une liste de chemins triee, stable.
+    """
+    trouves = []
+
+    def descendre(d: Path, profondeur: int):
+        try:
+            sous = sorted(p for p in d.iterdir() if p.is_dir())
+        except OSError:
+            return
+        for sub in sous:
+            if sub.name in DOSSIERS_PIPELINE or sub.name in DOSSIERS_IGNORES:
+                continue
+            if trouver_audio(sub) is not None:
+                trouves.append(sub)               # entretien : on s'arrete la
+            elif profondeur < profondeur_max:
+                descendre(sub, profondeur + 1)
+
+    descendre(perimetre, 1)
+    return sorted(trouves, key=lambda p: str(p).lower())
+
+
 def scanner_perimetre(perimetre: Path):
-    """Liste les entretiens (sous-dossiers immediats contenant un audio)."""
+    """Liste les entretiens du perimetre (recursif, cf. collecter_entretiens)."""
     entretiens = []
-    for sub in sorted(p for p in perimetre.iterdir() if p.is_dir()):
-        if trouver_audio(sub) is not None:
-            entretiens.append(etat_entretien(sub))
+    for sub in collecter_entretiens(perimetre):
+        e = etat_entretien(sub)
+        # Etiquette non ambigue quand l'entretien est imbrique : chemin relatif
+        # au perimetre (deux sous-arbres peuvent avoir un dossier de meme nom).
+        rel = sub.relative_to(perimetre)
+        if len(rel.parts) > 1:
+            e["dossier"] = rel.as_posix()
+        entretiens.append(e)
     memoire = trouver_ascendant(perimetre, NOM_MEMOIRE)
     alias_legacy = trouver_ascendant(perimetre, "alias.yaml") if memoire is None else None
     return {

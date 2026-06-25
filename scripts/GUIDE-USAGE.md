@@ -271,6 +271,13 @@ Affiche, pour chaque entretien, l'état de chaque étape et la **prochaine
 action** en distinguant ce qui est **automatisable** (`auto`) de ce qui te
 revient (`toi`). Lecture seule, n'exécute rien.
 
+> **Détection récursive.** Les entretiens sont cherchés **jusqu'à 4 niveaux** sous
+> le périmètre (1 = sous-dossiers directs) : tu peux regrouper les entretiens dans
+> des sous-dossiers (par client, vague, thème…). Un dossier est reconnu comme
+> entretien **dès qu'il contient un audio** ; les imbriqués apparaissent avec leur
+> chemin relatif (`GroupeA/entretien_x`). Cela vaut pour `ia tableau`,
+> `ia orchestrer` et `ia veille`.
+
 ```
   Entretien            Transcr  Tag  Coupe  Analyse  Anonym  Prochaine action (qui)
   ...

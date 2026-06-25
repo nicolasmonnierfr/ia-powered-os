@@ -113,8 +113,9 @@ def main():
     if args.un:
         dossiers = [cible]
     else:
-        dossiers = [p for p in sorted(cible.iterdir())
-                    if p.is_dir() and E.trouver_audio(p) is not None]
+        # Scan RECURSIF (aligne sur etat.py) : les entretiens peuvent etre
+        # imbriques de quelques niveaux sous le perimetre.
+        dossiers = E.collecter_entretiens(cible)
 
     n = 0
     for d in dossiers:

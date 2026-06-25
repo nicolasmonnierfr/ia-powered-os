@@ -9,6 +9,22 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.19.0] — 2026-06-25
+
+### Ajouté
+- **Scan récursif des périmètres (entretiens imbriqués).** L'orchestrateur ne
+  détectait les entretiens que dans les **sous-dossiers immédiats** d'un périmètre
+  (`etat.py` / `sync.py`). Il les cherche désormais **récursivement**, jusqu'à
+  `PROFONDEUR_MAX = 4` niveaux sous le périmètre inscrit (1 = enfants directs), ce
+  qui permet d'organiser librement les entretiens en sous-dossiers de regroupement
+  (par client, vague, thème…). Un dossier est un entretien **dès qu'il contient un
+  audio** ; on **ne descend alors plus dedans** (garde-fou : sinon un
+  `2_coupe\..._coupe.m4a` serait pris pour un nouvel entretien), et les dossiers
+  techniques (pipeline, `.chunks`, `.git`, `__pycache__`, `.venv`…) sont ignorés.
+  Les entretiens imbriqués s'affichent avec leur **chemin relatif** au périmètre
+  (`GroupeA/ent_x`) pour lever toute ambiguïté de noms entre sous-arbres.
+  `tableau`, `orchestrer` et `veille` en bénéficient (logique de scan partagée).
+
 ## [1.18.0] — 2026-06-25
 
 ### Ajouté
