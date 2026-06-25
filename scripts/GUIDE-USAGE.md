@@ -51,8 +51,8 @@ tu ne le quittes plus. Les commandes créent et remplissent les sous-dossiers :
     │   ├── entretien_dupont_coupe.m4a
     │   ├── entretien_dupont_coupe.srt
     │   └── entretien_dupont_coupe.txt
-    └── 3_anonymisation/             ia anonymiser
-        ├── entretien_dupont_coupe.etat.json
+    └── 3_anonymisation/             ia identifier + ia analyser + ia anonymiser
+        ├── entretien_dupont_coupe.etat.json     (ia identifier ; validé par ia analyser)
         ├── entretien_dupont_coupe_anonymise.srt
         ├── entretien_dupont_coupe_anonymise.txt    lisible (pour analyse IA)
         └── entretien_dupont_coupe_rapport.txt
@@ -112,17 +112,32 @@ ia couper
 - Trouve `plan_de_coupe.json` dans `2_coupe\` et reconstruit l'audio raccourci
   `..._coupe.m4a` (réencodage précis à la milliseconde).
 
-### 4. Anonymiser (trois temps)
+### 4. Anonymiser (quatre temps)
+
+L'anonymisation se fait en deux sous-étapes distinctes : **`ia identifier`**
+(détection automatique des entités) puis **`ia analyser`** (validation humaine
+dans l'éditeur). Cette séparation permet à l'orchestrateur de pré-détecter tout
+seul ; seule la validation te revient.
+
+```powershell
+ia identifier
+```
+
+- Détecte les entités (NER local, 100 % hors ligne) → écrit
+  `3_anonymisation\<nom>.etat.json` (candidats à valider).
+- **Automatique** : `ia orchestrer` le lance pour toi dès que le transcript est
+  prêt. En flux manuel, lance-le **avant** `ia analyser`.
 
 ```powershell
 ia analyser
 ```
 
-- Détecte les entités (NER local, 100 % hors ligne).
-- Ouvre l'**éditeur** dans Chrome : tu valides les entités, corriges
-  les types, exclus les faux positifs.
+- Ouvre l'**éditeur** dans Chrome sur les candidats déjà identifiés (exige donc
+  que `ia identifier` ait tourné) : tu valides les entités, corriges les types,
+  exclus les faux positifs.
 - Bouton **« Exporter la mémoire »** : écrit `memoire_client.json` au niveau du
-  **périmètre** (voir ci-dessous).
+  **périmètre** (voir ci-dessous) et marque la validation comme faite — c'est ce
+  signal qui débloque l'anonymisation automatique.
 
 ```powershell
 ia anonymiser
@@ -221,9 +236,11 @@ Active le venv dans la session courante.
 | Commande | Effet | Sortie |
 |----------|-------|--------|
 | `ia transcrire` | transcription + diarisation | `1_transcription\` |
-| `ia taguer` | tagging locuteurs + plan de coupe | `2_coupe\` |
+| `ia reconcilier` | recollage des locuteurs entre tronçons (empreinte vocale) | `1_transcription\<nom>.reconcile.json` |
+| `ia taguer` | tagging locuteurs + plan de coupe (lance `reconcilier` au besoin) | `2_coupe\` |
 | `ia couper` | audio raccourci | `2_coupe\` |
-| `ia analyser` | détection + validation | `memoire_client.json` (périmètre) |
+| `ia identifier` | détection NER (auto) → candidats | `3_anonymisation\<nom>.etat.json` |
+| `ia analyser` | validation humaine (éditeur) | `memoire_client.json` (périmètre) |
 | `ia anonymiser` | application du remplacement | `3_anonymisation\` |
 | `ia repersonnaliser` | réinjection des vrais noms (#12) | `..._REPERSONNALISE` |
 | `ia etat` | avancement de l'entretien **courant** | lit `entretien.json` |

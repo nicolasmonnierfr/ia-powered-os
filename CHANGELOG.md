@@ -9,6 +9,37 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.17.1] — 2026-06-25
+
+### Corrigé (documentation)
+- **Passe de cohérence doc ↔ code.** La documentation avait pris du retard sur le
+  code. Corrigé :
+  - **`DEMARRAGE-RAPIDE.md` — mauvaise licence pyannote.** La procédure faisait
+    accepter `pyannote/speaker-diarization-3.1` ; or whisperx (3.8.x) utilise
+    `pyannote/speaker-diarization-community-1` (cf. `whisperx/diarize.py`). Un
+    nouvel utilisateur tombait sur une **erreur 403** à la diarisation. Aligné sur
+    le modèle réellement utilisé.
+  - **Étape `ia identifier` rétablie dans le pipeline documenté.** Le
+    `GUIDE-USAGE.md` (§4 + aide-mémoire + arborescence) et le `README.md`
+    présentaient `ia analyser` comme faisant la détection NER, alors que celle-ci
+    est portée par **`ia identifier`** (étape distincte, automatisable) et que
+    `ia analyser` (validation humaine) **exige** que `identifier` ait tourné. En
+    flux manuel, suivre l'ancienne doc menait à une erreur. La séparation
+    identifier/analyser est désormais documentée partout.
+  - **`README.md` : commandes `ia` complétées** (`ia identifier`, `ia reconcilier`
+    étaient absents de la liste).
+  - **`tools/transcription/README.md` recadré sur le flux `ia`.** Le document
+    décrivait l'ancien usage autonome comme primaire (sorties `data/transcriptions\`,
+    double-clic sur `tagger.html`, « chargement manuel à chaque session »), ce qui
+    contredit le flux projet (`ia transcrire`/`ia taguer` : auto-chargement, sorties
+    `1_transcription\`/`2_coupe\`). Le flux `ia` est désormais primaire ; l'usage
+    autonome est conservé en repli, explicitement étiqueté.
+  - **`tools/anonymisation/README.md` : table de correspondance `ia` ↔ scripts**
+    ajoutée, et **levée d'ambiguïté** sur `reconcilier` (deux scripts distincts :
+    `ia reconcilier` = locuteurs/empreinte vocale, ≠ `anonymisation/reconcilier.py`).
+  - **`config/.env.example` : `EMBEDDING_MODEL` documenté** (référencé par le README
+    de transcription mais absent du modèle de config).
+
 ## [1.17.0] — 2026-06-18
 
 ### Ajouté

@@ -30,7 +30,7 @@ de Python ou ffmpeg, puis d'être **relancé**. C'est normal.
 a. Créer un compte sur https://huggingface.co
 b. Générer un token : https://huggingface.co/settings/tokens (type "Read")
 c. Accepter les licences (connecté) :
-   - https://huggingface.co/pyannote/speaker-diarization-3.1
+   - https://huggingface.co/pyannote/speaker-diarization-community-1
    - https://huggingface.co/pyannote/segmentation-3.0
 d. Coller le token dans `config\.env` (ligne `HUGGINGFACE_TOKEN=`)
 

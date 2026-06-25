@@ -20,7 +20,35 @@ modèles WhisperX/pyannote).
 
 ---
 
-## 1. Transcription (`transcribe.py`)
+## Usage courant : la commande `ia` (recommandé)
+
+En pratique on ne lance **jamais** ces scripts à la main : tout passe par la
+commande `ia`, depuis le dossier de l'entretien (voir `scripts/GUIDE-USAGE.md`).
+
+```powershell
+ia transcrire        # transcription + diarisation -> 1_transcription\
+ia taguer            # ouvre le tagueur, audio + .srt DÉJÀ chargés -> 2_coupe\
+ia couper            # reconstruit l'audio raccourci -> 2_coupe\
+```
+
+Dans ce flux :
+
+- `ia transcrire` range les sorties dans `1_transcription\` (pas dans
+  `data/transcriptions\`), avec diarisation **activée par défaut**.
+- `ia taguer` démarre un petit serveur local qui **charge automatiquement**
+  l'audio (racine de l'entretien) et le `.srt` (`1_transcription\`) ; les exports
+  partent directement dans `2_coupe\`. Pas de chargement manuel, pas de
+  double-clic sur le HTML.
+- La réconciliation des locuteurs entre tronçons est **pré-calculée** par
+  `ia reconcilier` (lancé au besoin par `ia taguer`).
+
+Les sections ci-dessous documentent les scripts **sous-jacents** et leur usage
+**autonome** (cas avancé : appel Python direct, tagueur ouvert en fichier seul).
+Le comportement du moteur est identique ; seul le mode de lancement diffère.
+
+---
+
+## 1. Transcription (`transcribe.py`) — usage autonome
 
 ### Prérequis
 - Environnement installé via `bootstrap/setup-windows.ps1`
@@ -69,9 +97,15 @@ Connecté à ton compte Hugging Face, accepter les conditions sur :
 
 ## 2. Tagueur de locuteurs (`tagger.html`)
 
-Outil autonome qui tourne dans le navigateur (rien à installer). Il charge un
+Outil qui tourne dans le navigateur (rien à installer). Il charge un
 audio + un `.srt`, joue l'audio en surlignant le segment courant, et permet
 d'attribuer chaque passage à un locuteur.
+
+> **En usage courant (`ia taguer`)**, l'audio et le `.srt` sont **chargés
+> automatiquement** par le serveur local et les exports vont dans `2_coupe\` :
+> tu peux ignorer les étapes de chargement manuel ci-dessous. Elles ne
+> concernent que l'ouverture **autonome** du HTML (double-clic), conservée comme
+> repli.
 
 **Nombre de locuteurs réglable (2 à 4)** via le sélecteur « Locuteurs » en haut.
 Par défaut 2 (cas de l'entretien 1-à-1). Réduire le nombre remet à « non

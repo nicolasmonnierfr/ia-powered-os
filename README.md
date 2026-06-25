@@ -54,7 +54,9 @@ IA-Powered-OS/
 
 Le pipeline complet se pilote via une commande unique, lancée **depuis le
 dossier d'un entretien** : `ia transcrire`, `ia taguer`, `ia couper`,
-`ia analyser` / `ia anonymiser` / `ia repersonnaliser`. Installation : `.\scripts\installer-ia.ps1`.
+`ia identifier`, `ia analyser`, `ia anonymiser`, `ia repersonnaliser`
+(plus `ia reconcilier`, recollage des locuteurs entre tronçons, lancé
+automatiquement par `ia taguer`). Installation : `.\scripts\installer-ia.ps1`.
 Voir `scripts/GUIDE-USAGE.md`.
 
 ### Orchestration multi-entretiens

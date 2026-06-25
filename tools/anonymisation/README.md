@@ -40,6 +40,24 @@ universels (politesses, titres). Voir `SCHEMA.md` pour le contrat complet.
 | `memoire_client.example.json` | Modèle de mémoire (à copier/adapter) |
 | `SCHEMA.md` | Format des fichiers (contrat de données) |
 
+## Correspondance avec la commande `ia`
+
+En usage courant on passe par `ia` (voir `scripts/GUIDE-USAGE.md`), qui mappe ces
+scripts ainsi :
+
+| Commande `ia` | Script appelé | Rôle |
+|---------------|---------------|------|
+| `ia identifier` | `detecter.py` | détection NER (auto) → `.etat.json` |
+| `ia analyser` | `serveur_editeur.py` + `editeur_alias.html` | validation humaine → `memoire_client.json` |
+| `ia anonymiser` | `appliquer.py` | application → transcript anonymisé |
+| `ia repersonnaliser` | `desanonymiser.py` | réinjection des vrais noms (#12) |
+
+> ⚠️ `reconcilier.py` (ci-dessous, fusion d'entités CLI) **n'est pas** exposé par
+> `ia reconcilier` : cette commande-là réconcilie les **locuteurs** entre tronçons
+> (`tools/transcription/reconcilier.py`, empreinte vocale). La validation par `ia`
+> se fait via l'éditeur (`ia analyser`) ; `reconcilier.py` reste un raccourci CLI
+> autonome, équivalent à l'éditeur pour produire la mémoire.
+
 ## Workflow
 
 ```
