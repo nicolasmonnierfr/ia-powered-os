@@ -23,7 +23,8 @@ IA-Powered-OS/
 ├── tools/            Outils métier exécutables
 │   ├── transcription/  Transcription d'entretiens (WhisperX) + tagueur + serveur
 │   ├── anonymisation/  Anonymisation locale des transcripts (Presidio) + éditeur + serveur
-│   └── orchestrateur/  Vue d'état globale + sync de la mémoire par projet
+│   ├── orchestrateur/  Vue d'état globale + sync de la mémoire par projet
+│   └── synthese/       Synthèse multi-entretiens (manifeste + garde-fou anti-fuite ; IA à venir)
 ├── scripts/          Commande `ia` + wrappers (industrialisation du pipeline)
 ├── config/           Modèles de configuration (.env.example)
 ├── data/             Données locales (gitignoré : intermédiaires .chunks/)
@@ -49,6 +50,7 @@ IA-Powered-OS/
 | `tools/transcription` | Transcription + diarisation d'entretiens (WhisperX, local) + tagueur | En cours |
 | `tools/anonymisation` | Anonymisation locale des transcripts (Presidio/spaCy FR) avec pseudonymes cohérents et mémoire client unique réutilisable (+ dé-anonymisation) | En cours |
 | `tools/orchestrateur` | Vue d'avancement par entretien (tableau global) + exécution auto de l'automatisable + sync de la mémoire par projet | En cours |
+| `tools/synthese` | Synthèse croisée de plusieurs entretiens anonymisés (sélection par manifeste + garde-fou anti-fuite ; appel API Claude à venir) | En cours |
 
 ## Commande `ia` (industrialisation)
 

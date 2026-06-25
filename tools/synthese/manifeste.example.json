@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "titre": "Diagnostic transfo IA — Acme — vague 1",
+  "memoire": "../memoire_client.json",
+  "entretiens": [
+    {
+      "id": "E1",
+      "source": "dupont/3_anonymisation/dupont_coupe_anonymise.txt",
+      "inclure": true,
+      "role": "Direction financiere",
+      "interviewe": "PERSONNE_1"
+    },
+    {
+      "id": "E2",
+      "source": "martin/3_anonymisation/martin_coupe_anonymise.txt",
+      "inclure": true,
+      "role": "Production",
+      "interviewe": "PERSONNE_5"
+    },
+    {
+      "id": "E3",
+      "source": "leroy/3_anonymisation/leroy_coupe_anonymise.txt",
+      "inclure": false,
+      "role": "",
+      "interviewe": ""
+    }
+  ]
+}

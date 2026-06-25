@@ -9,6 +9,32 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.20.0] — 2026-06-25
+
+### Ajouté
+- **Nouvel outil `tools/synthese` — synthèse multi-entretiens (incrément 1 :
+  fondations, sans appel IA).** Objectif à terme : produire une synthèse croisée
+  de plusieurs entretiens **anonymisés** via l'API Claude, livrable au client via
+  `ia repersonnaliser`. Ce premier incrément pose les deux invariants de sûreté
+  **avant** toute ligne d'appel API :
+  - **Périmètre par manifeste (`ia synthese init`).** La synthèse porte sur une
+    **sélection** explicite d'entretiens (pas un dossier entier), décrite dans
+    `synthese.manifeste.json`. `init` le pré-génère en scannant le périmètre
+    (récursif, moteur de l'orchestrateur réutilisé) ; on édite ensuite
+    `inclure` / `role` / `interviewe`. Chaque entretien reçoit un **label neutre**
+    (`E1`, `E2`…) — c'est lui qui part, **jamais le nom de fichier** (qui porte
+    souvent un vrai nom).
+  - **Garde-fou anti-fuite (`ia synthese verifier`).** Assemble le payload exact
+    qui partirait (uniquement `id` / `role` / `interviewe` / **contenu
+    anonymisé** — aucun chemin) et le confronte à la `memoire_client.json`
+    (LOCALE) : il **rejoue le matcher de l'anonymiseur** (frontières `\b`, casse
+    ignorée) sur le texte déjà anonymisé ; toute occurrence d'un vrai nom
+    (`variantes`/`canonique`, nom du client) **bloque l'envoi** (code 2). Couvre
+    à la fois les noms de fichiers (exclus par construction) et les **ratés de
+    contenu**. Option `-Dump` pour écrire le payload en local et l'inspecter.
+  - Wrapper `scripts/synthese.ps1` + intégration au dispatcher (`ia synthese`).
+    L'appel API (`ia synthese lancer`) viendra dans un incrément suivant.
+
 ## [1.19.0] — 2026-06-25
 
 ### Ajouté

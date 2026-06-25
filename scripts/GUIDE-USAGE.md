@@ -164,6 +164,35 @@ ia repersonnaliser -Rapport "rapport.md"
 
 ---
 
+## Synthèse multi-entretiens (`ia synthese`)
+
+Pour analyser **plusieurs entretiens d'un coup** (synthèse croisée), sans repasser
+par un chat externe. La synthèse porte sur une **sélection** d'entretiens décrite
+dans un **manifeste**, jamais sur un dossier entier.
+
+```powershell
+cd C:\...\Mission                 # le périmètre (dossier des entretiens)
+ia synthese init                  # pré-génère synthese.manifeste.json
+# … tu édites le manifeste : inclure/exclure, role, interviewe …
+ia synthese verifier              # GARDE-FOU : aucun vrai nom ne doit subsister
+```
+
+- **`init`** scanne le périmètre (récursif) et liste les entretiens **anonymisés**
+  trouvés, avec un label neutre (`E1`, `E2`…). Tu édites ensuite :
+  - `inclure` (true/false) pour choisir les entretiens de l'analyse ;
+  - `role` (descripteur **générique** facultatif) et `interviewe` (pseudonyme).
+- **`verifier`** = **garde-fou anti-fuite** : il assemble le contenu qui partirait
+  (uniquement labels neutres + texte **anonymisé**, **jamais** les noms de
+  fichiers) et le confronte à la `memoire_client.json` (locale). Tout vrai nom
+  résiduel **bloque** l'envoi. `-Dump payload.local.json` écrit le payload pour
+  inspection locale.
+
+> Cet incrément pose les fondations **sans appel IA**. La synthèse via l'API
+> Claude (`ia synthese lancer`) viendra ensuite ; sa sortie, en pseudonymes,
+> se livrera au client via `ia repersonnaliser`.
+
+---
+
 ## Le « périmètre » d'anonymisation
 
 `memoire_client.json` est **partagé entre plusieurs
@@ -243,6 +272,7 @@ Active le venv dans la session courante.
 | `ia analyser` | validation humaine (éditeur) | `memoire_client.json` (périmètre) |
 | `ia anonymiser` | application du remplacement | `3_anonymisation\` |
 | `ia repersonnaliser` | réinjection des vrais noms (#12) | `..._REPERSONNALISE` |
+| `ia synthese init/verifier` | synthèse multi-entretiens : manifeste + garde-fou anti-fuite | `synthese.manifeste.json` |
 | `ia etat` | avancement de l'entretien **courant** | lit `entretien.json` |
 | `ia tableau [périm]` | vue **globale** de tous les entretiens | tableau console |
 | `ia orchestrer [périm]` | une passe : tableau + exécute l'automatisable | `ETAT.md` + livrables |

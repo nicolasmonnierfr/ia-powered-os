@@ -13,6 +13,7 @@
 #   ia analyser          # validation HUMAINE (editeur) -> memoire_client.json
 #   ia anonymiser        # applique le remplacement -> transcript anonymise
 #   ia repersonnaliser [-Rapport f] [-Memoire m] [-Court]   # reinjecte les vrais noms (#12)
+#   ia synthese init|verifier   # synthese multi-entretiens (manifeste + garde-fou anti-fuite)
 #   ia etat              # affiche l'avancement de l'entretien courant
 #   ia tableau [perim]   # vue globale de tous les entretiens d'un perimetre
 #   ia orchestrer [perim]# une passe : tableau + execution de l'automatisable
@@ -51,6 +52,7 @@ function Show-Aide {
     Write-Host "  ia analyser                      " -NoNewline -ForegroundColor Green; Write-Host "Validation HUMAINE (editeur) -> memoire_client.json"
     Write-Host "  ia anonymiser                    " -NoNewline -ForegroundColor Green; Write-Host "Applique le remplacement -> 3_anonymisation\"
     Write-Host "  ia repersonnaliser [-Rapport f]  " -NoNewline -ForegroundColor Green; Write-Host "Reinjecte les vrais noms dans un rapport (#12 ; -Memoire m si hors perimetre)"
+    Write-Host "  ia synthese init|verifier        " -NoNewline -ForegroundColor Green; Write-Host "Synthese multi-entretiens (manifeste + garde-fou anti-fuite)"
     Write-Host "  ia etat                          " -NoNewline -ForegroundColor Green; Write-Host "Avancement detaille de l'entretien courant (workflow complet)"
     Write-Host "  ia tableau [perimetre]           " -NoNewline -ForegroundColor Green; Write-Host "Vue globale de tous les entretiens"
     Write-Host "  ia orchestrer [perimetre]        " -NoNewline -ForegroundColor Green; Write-Host "Une passe : tableau + execute l'automatisable"
@@ -109,6 +111,7 @@ $map = @{
     "couper"     = "couper.ps1"
     "orchestrer" = "orchestrer.ps1"
     "veille"     = "veille.ps1"
+    "synthese"   = "synthese.ps1"
 }
 
 # Commandes d'anonymisation : toutes servies par anonymisation.ps1, avec une ETAPE
