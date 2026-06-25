@@ -6,20 +6,26 @@
 #
 #   ia synthese init [perimetre]        # pre-genere synthese.manifeste.json
 #   ia synthese verifier [manifeste]    # GARDE-FOU anti-fuite (avant tout envoi IA)
+#   ia synthese lancer [manifeste]      # synthese via l'API Claude -> 4_synthese\synthese.md
 #
 # La synthese ne porte que sur les entretiens DESIGNES dans le manifeste (tu
 # selectionnes/edites la liste). Le garde-fou confronte le contenu anonymise a la
 # memoire client (LOCALE) : tout vrai nom residuel BLOQUE l'envoi. Les noms de
 # fichiers ne partent jamais (le payload ne porte que des labels neutres).
-#
-# (L'appel a l'IA -- 'ia synthese lancer' -- viendra dans un increment suivant.)
+# 'lancer' rejoue le garde-fou en barriere avant d'appeler l'API.
 # =============================================================================
 
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)] [string]$Action,
     [Parameter(Position = 1)] [string]$Cible,
-    [string]$Dump
+    [string]$Dump,
+    [string]$Out,
+    [string]$Gabarit,
+    [string]$Modele,
+    [int]$MaxTokens,
+    [switch]$Court,
+    [switch]$DryRun
 )
 
 . "$PSScriptRoot\_commun.ps1"
@@ -28,24 +34,36 @@ $repo    = Get-RepoHome
 $python  = Get-PythonExe -RepoHome $repo
 $manifPy = Get-Tool -RepoHome $repo "tools\synthese\manifeste.py"
 $gardePy = Get-Tool -RepoHome $repo "tools\synthese\garde_fou.py"
+$lancerPy = Get-Tool -RepoHome $repo "tools\synthese\lancer.py"
 $NOM_MANIFESTE = "synthese.manifeste.json"
 
 function Show-AideSynthese {
     Write-Host ""
     Write-Host "ia synthese — synthese multi-entretiens" -ForegroundColor Cyan
-    Write-Host "  ia synthese init [perimetre]      " -NoNewline -ForegroundColor Green; Write-Host "Pre-genere $NOM_MANIFESTE (scan recursif)"
+    Write-Host "  ia synthese creer [perimetre]     " -NoNewline -ForegroundColor Green; Write-Host "Cree INTERACTIVEMENT $NOM_MANIFESTE (scan + questions)"
+    Write-Host "  ia synthese init [perimetre]      " -NoNewline -ForegroundColor Green; Write-Host "Pre-genere $NOM_MANIFESTE (modele non interactif)"
     Write-Host "  ia synthese verifier [manifeste]  " -NoNewline -ForegroundColor Green; Write-Host "Garde-fou anti-fuite (avant tout envoi IA)"
+    Write-Host "  ia synthese lancer [manifeste]    " -NoNewline -ForegroundColor Green; Write-Host "Synthese via l'API Claude -> 4_synthese\synthese.md"
     Write-Host ""
-    Write-Host "  Flux : init -> editer le manifeste (inclure/role/interviewe) -> verifier." -ForegroundColor Gray
+    Write-Host "  Flux : init -> editer (inclure/role/interviewe) -> verifier -> lancer -> repersonnaliser." -ForegroundColor Gray
+    Write-Host "  lancer : -DryRun (prompt local sans envoi), -Modele, -MaxTokens, -Gabarit, -Out." -ForegroundColor Gray
     Write-Host ""
 }
 
 switch ($Action) {
 
+    "creer" {
+        $perim = if ($Cible) { $Cible } else { (Get-Location).Path }
+        if (-not (Test-Path -LiteralPath $perim)) { Write-Echec "Perimetre introuvable : $perim"; exit 1 }
+        Write-Etape "Creation interactive d'une configuration de synthese"
+        & $python $manifPy creer $perim   # interactif : lit tes reponses au clavier
+        exit $LASTEXITCODE
+    }
+
     "init" {
         $perim = if ($Cible) { $Cible } else { (Get-Location).Path }
         if (-not (Test-Path -LiteralPath $perim)) { Write-Echec "Perimetre introuvable : $perim"; exit 1 }
-        Write-Etape "Generation du manifeste de synthese"
+        Write-Etape "Generation du manifeste de synthese (modele)"
         & $python $manifPy init $perim
         exit $LASTEXITCODE
     }
@@ -65,6 +83,26 @@ switch ($Action) {
         if ($code -eq 0) { Write-Ok "Payload sur : aucun vrai nom detecte." }
         else { Write-Avert "Verification non passee (voir ci-dessus) — ne pas envoyer en l'etat." }
         exit $code
+    }
+
+    "lancer" {
+        $manif = if ($Cible) { $Cible } else { Join-Path (Get-Location).Path $NOM_MANIFESTE }
+        if (-not (Test-Path -LiteralPath $manif)) {
+            Write-Echec "Manifeste introuvable : $manif"
+            Write-Info  "Genere-le d'abord : ia synthese init"
+            exit 1
+        }
+        Write-Etape "Synthese multi-entretiens (API Claude)"
+        Write-Avert "Le garde-fou anti-fuite est rejoue en barriere : tout vrai nom residuel bloque l'envoi."
+        $pyArgs = @($lancerPy, $manif)
+        if ($Out)       { $pyArgs += @("--out", $Out) }
+        if ($Gabarit)   { $pyArgs += @("--gabarit", $Gabarit) }
+        if ($Modele)    { $pyArgs += @("--modele", $Modele) }
+        if ($MaxTokens) { $pyArgs += @("--max-tokens", $MaxTokens) }
+        if ($Court)     { $pyArgs += "--court" }
+        if ($DryRun)    { $pyArgs += "--dry-run" }
+        & $python @pyArgs
+        exit $LASTEXITCODE
     }
 
     default {

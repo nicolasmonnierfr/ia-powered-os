@@ -5,10 +5,9 @@ Produit, à partir de **plusieurs entretiens anonymisés** d'une mission, une
 analysée par l'**API Claude**, puis re-personnalisée pour le client via l'outil
 existant (`ia repersonnaliser`).
 
-> **État : en cours.** Cet outil se construit par incréments. Le premier
-> incrément, **livré ici**, pose les fondations *sans appel IA* : la **définition
-> du périmètre** (manifeste) et le **garde-fou anti-fuite**. L'appel à l'API
-> (`ia synthese lancer`) viendra ensuite.
+> **État : en cours.** Construit par incréments. Sont livrés : la **définition du
+> périmètre** (manifeste), le **garde-fou anti-fuite**, et l'**appel à l'API
+> Claude** (`ia synthese lancer`).
 
 ## Pourquoi ces fondations d'abord
 
@@ -24,28 +23,36 @@ La synthèse envoie du texte à une IA externe. Deux invariants de sûreté doiv
 
 | Fichier | Rôle |
 |---------|------|
-| `manifeste.py` | Définit le périmètre : `init` (pré-génère) + `valider` un `synthese.manifeste.json` |
+| `manifeste.py` | Définit le périmètre : `creer` (interactif) / `init` (modèle) / `valider` un `synthese.manifeste.json` |
 | `garde_fou.py` | **Filet anti-fuite** : assemble le payload et le confronte à la mémoire client (LOCALE) |
+| `lancer.py` | Appel à l'**API Claude** (garde-fou en barrière) → `4_synthese/synthese.md` |
+| `gabarits/` | Trames de synthèse (défaut : `diagnostic_transfo_ia.md`) |
 | `manifeste.example.json` | Modèle de manifeste commenté |
 
 Pilotage via la commande `ia` :
 
 ```powershell
-ia synthese init [perimetre]        # pré-génère synthese.manifeste.json (scan récursif)
+ia synthese creer [perimetre]       # crée le manifeste INTERACTIVEMENT (scan + questions)
+ia synthese init [perimetre]        # modèle non interactif (scan récursif)
 ia synthese verifier [manifeste]    # garde-fou anti-fuite (avant tout envoi IA)
+ia synthese lancer [manifeste]      # synthèse via l'API Claude (anonyme + repersonnalisée)
 ```
 
 ## 1. Le manifeste = le périmètre d'analyse
 
 La synthèse ne porte **pas** sur un répertoire : tu **désignes** les entretiens
-dans un manifeste JSON. `ia synthese init` le pré-remplit en scannant le
-périmètre (récursif, même moteur que l'orchestrateur), puis **tu l'édites**.
+dans un manifeste JSON. Le plus simple est **`ia synthese creer`** : il scanne le
+périmètre (récursif) et te pose les questions (titre, nom de sortie, et par
+entretien : inclure / rôle / interviewé — en te listant les pseudonymes connus).
+`ia synthese init` produit le même fichier en **modèle** non interactif, à éditer
+à la main.
 
 ```json
 {
   "version": 1,
   "titre": "Diagnostic transfo IA — vague 1",
-  "memoire": "../memoire_client.json",
+  "sortie": "rapport_acme",
+  "memoire": "memoire_client.json",
   "entretiens": [
     { "id": "E1", "source": "dupont/3_anonymisation/dupont_coupe_anonymise.txt",
       "inclure": true, "role": "Direction financiere", "interviewe": "PERSONNE_1" }
@@ -61,8 +68,12 @@ périmètre (récursif, même moteur que l'orchestrateur), puis **tu l'édites**
 | `role` | oui | Descripteur **neutre** facultatif (⚠ garder générique : « DAF de Toulouse » ré-identifie) |
 | `interviewe` | oui | Pseudonyme principal (relie l'entretien à la mémoire → attribution cohérente + repersonnalisable) |
 
+- `sortie` = **nom de base** des fichiers produits par `lancer` (sans extension).
+  Les sorties sont écrites **au niveau de la mission** (à côté du manifeste), sans
+  sous-dossier : `<sortie>.md`, `<sortie>_REPERSONNALISE.md`, `<sortie>.run.json`.
+  Surchargeable en ligne de commande par `-Out`.
 - `memoire` pointe la `memoire_client.json` du périmètre (recherche ascendante à
-  l'`init`). **Jamais envoyée** — elle sert au garde-fou en local.
+  la création). **Jamais envoyée** — elle sert au garde-fou en local.
 - Un entretien sans transcript anonymisé est listé avec `inclure: false` et une
   note (lance `ia anonymiser` puis renseigne `source`).
 
@@ -96,15 +107,43 @@ ia synthese verifier -Dump payload.local.json   # écrit le payload (LOCAL) pour
         ▼
 ia synthese init  →  édition du manifeste  →  ia synthese verifier   ← garde-fou
         ▼
-[à venir] ia synthese lancer  →  4_synthese/synthese.md   (en pseudonymes, via API Claude)
-        ▼
-ia repersonnaliser  →  livrable client (vrais noms, LOCAL)
+ia synthese lancer  →  API Claude →  <sortie>.md                 (anonyme)
+                                  +  <sortie>_REPERSONNALISE.md   (livrable, LOCAL)
 ```
 
-La synthèse sortira **en pseudonymes** : `ia repersonnaliser` la transforme en
-livrable client — toute la boucle reste en interne, plus de copier-coller manuel.
+Toute la boucle reste **en interne**, plus de copier-coller manuel.
+
+## 3. La synthèse (`ia synthese lancer`)
+
+Appelle l'**API Claude** (`claude-opus-4-8` par défaut) sur le corpus vérifié,
+puis produit **deux versions au niveau de la mission** (nom de base = champ
+`sortie` du manifeste ou `-Out`) + un journal `<sortie>.run.json` (modèle,
+entrées, tokens) :
+
+- `<sortie>.md` — **anonyme** (pseudonymes), trace de ce qui a été envoyé ;
+- `<sortie>_REPERSONNALISE.md` — **le livrable** (vrais noms réinjectés), produit
+  **automatiquement** (la version anonyme n'a pas d'usage propre). ⚠️ contient les
+  vrais noms : usage **local**, ne jamais l'envoyer à une IA.
+
+Détails :
+
+- **Le garde-fou est rejoué en barrière** : `lancer` refuse d'envoyer si un vrai
+  nom subsiste (ou mémoire/sources manquantes) — impossible de le court-circuiter.
+- **Gabarit** configurable (`-Gabarit`), défaut `gabarits/diagnostic_transfo_ia.md`.
+- **`-Court`** réinjecte les prénoms (variante courte) plutôt que les noms complets.
+- **`-DryRun`** assemble le prompt et l'écrit en local (`synthese.prompt.txt`)
+  **sans** appeler l'API — pour inspecter ce qui partirait.
+
+```powershell
+ia synthese lancer -DryRun                 # prompt local, aucun envoi
+ia synthese lancer                         # appel réel -> anonyme + repersonnalisée
+ia synthese lancer -Modele claude-opus-4-8 -MaxTokens 16000
+```
 
 ## Prérequis
 
-Aucun nouveau pour cet incrément (stdlib Python uniquement). L'appel API à venir
-utilisera une clé Anthropic dans `config/.env`.
+- `anthropic` (dans `requirements.txt`, installé par le bootstrap) ;
+- **`ANTHROPIC_API_KEY`** dans `config/.env` (obtenir sur
+  https://console.anthropic.com/settings/keys).
+
+Les étapes `init` / `verifier` n'ont aucun prérequis (stdlib uniquement).

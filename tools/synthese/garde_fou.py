@@ -107,6 +107,10 @@ def assembler_payload(manifeste_path: Path, data: dict):
             "role": e.get("role", "") or None,
             "interviewe": e.get("interviewe", "") or None,
             "texte": sp.read_text(encoding="utf-8"),
+            # 'source' sert UNIQUEMENT au rapport local (localiser une fuite) ;
+            # il n'est jamais envoye a l'IA (lancer.construire_prompt l'ignore,
+            # et --dump le retire de "ce qui partirait").
+            "source": src,
         })
     return payload, manquants
 
@@ -123,8 +127,8 @@ def verifier(manifeste_path: Path) -> dict:
     resultats = []
     for item in payload:
         violations = scanner_texte(item["texte"], pats)
-        resultats.append({"id": item["id"], "violations": violations,
-                          "longueur": len(item["texte"])})
+        resultats.append({"id": item["id"], "source": item.get("source"),
+                          "violations": violations, "longueur": len(item["texte"])})
 
     total_fuites = sum(len(r["violations"]) for r in resultats)
     return {
@@ -163,9 +167,12 @@ def main():
         sys.exit(1)
 
     if args.dump:
+        # On ecrit EXACTEMENT ce qui partirait (sans 'source', usage local).
+        sent = [{k: it.get(k) for k in ("id", "role", "interviewe", "texte")}
+                for it in rap["payload"]]
         Path(args.dump).write_text(
-            json.dumps(rap["payload"], ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"[i] Payload ecrit (LOCAL) : {args.dump}")
+            json.dumps(sent, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[i] Payload (ce qui PARTIRAIT) ecrit (LOCAL) : {args.dump}")
 
     print(f"Memoire           : {rap['memoire']}  ({'OK' if rap['memoire_existe'] else 'ABSENTE'})")
     print(f"Vrais noms charges : {rap['nb_interdits']}")
@@ -188,7 +195,8 @@ def main():
         print(f"\n[FUITE] {rap['total_fuites']} occurrence(s) de vrais noms dans le payload :")
         for r in rap["resultats"]:
             for v in r["violations"]:
-                print(f"    - {r['id']} : « {v['forme']} » (entree « {v['terme']} ») … {v['extrait']}")
+                print(f"    - {r['id']}  [{r.get('source') or '?'}]")
+                print(f"        « {v['forme']} » (entree « {v['terme']} ») … {v['extrait']}")
         print("\n=> ENVOI BLOQUE. Corrige l'anonymisation (mémoire/relance) avant de continuer.")
         sys.exit(2)
 

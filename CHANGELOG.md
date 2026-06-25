@@ -9,6 +9,43 @@ parenthèses) et retiré du backlog.
 
 ---
 
+## [1.21.0] — 2026-06-25
+
+### Ajouté
+- **`ia synthese lancer` — synthèse multi-entretiens via l'API Claude.** Dernier
+  maillon de l'outil `tools/synthese` : à partir du manifeste vérifié, appelle
+  l'**API Claude** (`claude-opus-4-8` par défaut, thinking adaptatif, en
+  streaming) sur le corpus anonymisé, puis écrit **deux versions** dans
+  `4_synthese/` + un journal `synthese.run.json` (modèle, entrées, tokens) :
+  - `synthese.md` — **anonyme** (pseudonymes), trace de ce qui a été envoyé ;
+  - `<sortie>_REPERSONNALISE.md` — **le livrable** (vrais noms réinjectés),
+    produit **automatiquement** (la repersonnalisation est intégrée à `lancer` —
+    la version anonyme n'ayant pas d'usage propre, via `desanonymiser`). Option
+    `-Court` pour les prénoms. **Toute la boucle d'analyse revient en interne**,
+    plus de copier-coller dans un chat externe.
+  - **Sortie au niveau de la mission, nommage configurable.** Les fichiers ne
+    vont plus dans un sous-dossier `4_synthese/` (les `1_/2_/3_` n'avaient de sens
+    qu'au niveau *entretien* ; ici on est au niveau *mission*) : ils sont écrits à
+    côté du manifeste. Leur **nom de base** est le champ `sortie` du manifeste
+    (défaut `synthese`), surchargé par `-Out` : `<sortie>.md`,
+    `<sortie>_REPERSONNALISE.md`, `<sortie>.run.json`.
+  - **`ia synthese creer` — créateur interactif de configuration.** Scanne le
+    périmètre (récursif) et construit `synthese.manifeste.json` par questions
+    (titre, nom de sortie, et par entretien : inclure / rôle / interviewé, en
+    listant les pseudonymes connus de la mémoire). `ia synthese init` reste le
+    modèle non interactif.
+  - **Garde-fou rejoué en barrière.** `lancer` ré-exécute le filet anti-fuite
+    (`garde_fou.verifier`) avant tout envoi : un vrai nom résiduel, une mémoire
+    absente ou une source manquante **bloque** l'appel (code 2) — impossible à
+    court-circuiter.
+  - **`-DryRun`** assemble le prompt et l'écrit en local (`synthese.prompt.txt`)
+    **sans** appeler l'API. Options `-Modele`, `-MaxTokens`, `-Gabarit`, `-Out`.
+  - **Gabarit standard** « diagnostic transfo IA » (`gabarits/diagnostic_transfo_ia.md`,
+    surchargeable) : résumé exécutif, constats transverses, douleurs, opportunités
+    IA, maturité par dimension, divergences, recommandations.
+  - **Clé API** : `ANTHROPIC_API_KEY` dans `config/.env` (ajoutée à `.env.example`) ;
+    `anthropic` ajouté à `requirements.txt`.
+
 ## [1.20.0] — 2026-06-25
 
 ### Ajouté
@@ -31,7 +68,9 @@ parenthèses) et retiré du backlog.
     ignorée) sur le texte déjà anonymisé ; toute occurrence d'un vrai nom
     (`variantes`/`canonique`, nom du client) **bloque l'envoi** (code 2). Couvre
     à la fois les noms de fichiers (exclus par construction) et les **ratés de
-    contenu**. Option `-Dump` pour écrire le payload en local et l'inspecter.
+    contenu**. Le rapport de fuite indique le **fichier source** concerné (et pas
+    seulement le label `E1`/`E2`) — `lancer` aussi, pour ne pas rouvrir le
+    manifeste. Option `-Dump` pour écrire le payload (ce qui partirait) en local.
   - Wrapper `scripts/synthese.ps1` + intégration au dispatcher (`ia synthese`).
     L'appel API (`ia synthese lancer`) viendra dans un incrément suivant.
 

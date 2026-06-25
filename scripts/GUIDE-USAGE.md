@@ -172,24 +172,37 @@ dans un **manifeste**, jamais sur un dossier entier.
 
 ```powershell
 cd C:\...\Mission                 # le périmètre (dossier des entretiens)
-ia synthese init                  # pré-génère synthese.manifeste.json
-# … tu édites le manifeste : inclure/exclure, role, interviewe …
+ia synthese creer                 # crée le manifeste INTERACTIVEMENT (scan + questions)
 ia synthese verifier              # GARDE-FOU : aucun vrai nom ne doit subsister
+ia synthese lancer                # synthèse via l'API Claude : anonyme + REPERSONNALISÉE (livrable)
 ```
 
-- **`init`** scanne le périmètre (récursif) et liste les entretiens **anonymisés**
-  trouvés, avec un label neutre (`E1`, `E2`…). Tu édites ensuite :
-  - `inclure` (true/false) pour choisir les entretiens de l'analyse ;
-  - `role` (descripteur **générique** facultatif) et `interviewe` (pseudonyme).
+- **`creer`** scanne le périmètre (récursif), liste les entretiens **anonymisés**
+  trouvés (label neutre `E1`, `E2`…) et te pose les questions : titre, **nom de
+  base des fichiers de sortie**, puis par entretien `inclure` / `role` (générique)
+  / `interviewe` (pseudonyme — il te liste les interlocuteurs connus). Écrit
+  `synthese.manifeste.json`. _(`ia synthese init` produit le même fichier en
+  modèle non interactif, à éditer à la main.)_
 - **`verifier`** = **garde-fou anti-fuite** : il assemble le contenu qui partirait
   (uniquement labels neutres + texte **anonymisé**, **jamais** les noms de
   fichiers) et le confronte à la `memoire_client.json` (locale). Tout vrai nom
-  résiduel **bloque** l'envoi. `-Dump payload.local.json` écrit le payload pour
-  inspection locale.
+  résiduel **bloque** l'envoi — le rapport indique le **fichier** concerné (pas
+  seulement `E1`/`E2`) pour aller corriger directement. `-Dump payload.local.json`
+  écrit le payload pour inspection locale.
+- **`lancer`** appelle l'**API Claude** (`claude-opus-4-8` par défaut) puis écrit
+  **deux versions au niveau de la mission** (nom de base = champ `sortie` du
+  manifeste, ou `-Out`) + un journal `<sortie>.run.json` :
+  - `<sortie>.md` — **anonyme** (pseudonymes), trace de ce qui a été envoyé ;
+  - `<sortie>_REPERSONNALISE.md` — **le livrable** (vrais noms), produit
+    **automatiquement** (la repersonnalisation est intégrée — plus besoin de la
+    lancer à part). ⚠️ vrais noms : usage local.
 
-> Cet incrément pose les fondations **sans appel IA**. La synthèse via l'API
-> Claude (`ia synthese lancer`) viendra ensuite ; sa sortie, en pseudonymes,
-> se livrera au client via `ia repersonnaliser`.
+  Le garde-fou y est **rejoué en barrière** (impossible d'envoyer avec un vrai
+  nom). Options : `-DryRun` (prompt local, sans appel API), `-Court` (prénoms),
+  `-Modele`, `-MaxTokens`, `-Gabarit`, `-Out`.
+
+> Requiert `ANTHROPIC_API_KEY` dans `config\.env`. Toute la boucle d'analyse
+> reste en interne — plus de copier-coller dans un chat externe.
 
 ---
 
@@ -272,7 +285,7 @@ Active le venv dans la session courante.
 | `ia analyser` | validation humaine (éditeur) | `memoire_client.json` (périmètre) |
 | `ia anonymiser` | application du remplacement | `3_anonymisation\` |
 | `ia repersonnaliser` | réinjection des vrais noms (#12) | `..._REPERSONNALISE` |
-| `ia synthese init/verifier` | synthèse multi-entretiens : manifeste + garde-fou anti-fuite | `synthese.manifeste.json` |
+| `ia synthese creer/verifier/lancer` | synthèse multi-entretiens : config interactive + garde-fou + API Claude | `synthese.manifeste.json` → `<sortie>.md` + `_REPERSONNALISE` |
 | `ia etat` | avancement de l'entretien **courant** | lit `entretien.json` |
 | `ia tableau [périm]` | vue **globale** de tous les entretiens | tableau console |
 | `ia orchestrer [périm]` | une passe : tableau + exécute l'automatisable | `ETAT.md` + livrables |

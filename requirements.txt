@@ -10,6 +10,10 @@
 whisperx
 python-dotenv
 
+# === Synthèse multi-entretiens (tools/synthese) ===
+# Appel à l'API Claude pour la synthèse croisée (ia synthese lancer).
+anthropic
+
 # === Anonymisation (tools/anonymisation) ===
 # Détection d'entités en local (NER) + remplacement par pseudonymes.
 presidio-analyzer

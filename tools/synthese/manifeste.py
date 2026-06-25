@@ -79,6 +79,7 @@ def generer(perimetre: Path, base: Path) -> dict:
     return {
         "version": 1,
         "titre": perimetre.name,
+        "sortie": "synthese",   # nom de base des fichiers de sortie (editable)
         "memoire": (_relpath(Path(memoire), base) if memoire else MEM.NOM_MEMOIRE),
         "entretiens": entretiens,
     }
@@ -138,6 +139,75 @@ def valider(manifeste_path: Path) -> dict:
     }
 
 
+def _personnes_memoire(memoire_path: Path):
+    """(pseudo, canonique) des entrees PERSONNE de la memoire — pour aider au
+    choix de l'interviewe. Affichage LOCAL uniquement (jamais envoye)."""
+    if not memoire_path or not Path(memoire_path).is_file():
+        return []
+    mem = MEM.charger_memoire(Path(memoire_path))
+    out = []
+    for e in mem.get("entrees", []):
+        if e.get("type") == "PERSONNE":
+            out.append((e.get("pseudo", ""), e.get("canonique") or ""))
+    return out
+
+
+def creer(perimetre: Path, out_path: Path):
+    """Construit INTERACTIVEMENT un manifeste : scan du perimetre puis questions
+    (titre, nom de sortie, et par entretien : inclure / role / interviewe).
+    Lit les reponses sur l'entree standard (input())."""
+    perimetre = Path(perimetre).resolve()
+    base = out_path.parent
+    modele = generer(perimetre, base)
+    memoire_abs = (base / modele["memoire"]).resolve()
+    personnes = _personnes_memoire(memoire_abs)
+
+    print("\n=== Creation d'une configuration de synthese ===")
+    print(f"Perimetre : {perimetre}")
+    print(f"Memoire   : {modele['memoire']}  ({'OK' if memoire_abs.is_file() else 'ABSENTE'})")
+    nb = len(modele["entretiens"])
+    prets = sum(1 for e in modele["entretiens"] if e.get("inclure"))
+    print(f"Entretiens detectes : {nb}  (dont {prets} avec transcript anonymise)\n")
+
+    titre = input(f"Titre [{modele['titre']}] : ").strip() or modele["titre"]
+    sortie = input("Nom de base des fichiers de sortie [synthese] : ").strip() or "synthese"
+
+    if personnes:
+        print("\nInterlocuteurs connus (pseudonyme = vrai nom, LOCAL) :")
+        for ps, cano in personnes:
+            print(f"  {ps}{(' = ' + cano) if cano else ''}")
+
+    entretiens = []
+    for e in modele["entretiens"]:
+        eid = e["id"]
+        src = e.get("source", "")
+        print(f"\n--- {eid} : {src or '(pas de transcript anonymise)'}")
+        if not src:
+            print("    Non anonymise -> exclu (lance 'ia anonymiser' sur cet entretien puis relance).")
+            e["inclure"] = False
+            entretiens.append(e)
+            continue
+        rep = input("    Inclure dans la synthese ? [O/n] : ").strip().lower()
+        e["inclure"] = not rep.startswith("n")
+        if e["inclure"]:
+            e["role"] = input("    Role (generique, facultatif) : ").strip()
+            e["interviewe"] = input("    Interviewe (pseudonyme, facultatif) : ").strip()
+        entretiens.append(e)
+
+    data = {
+        "version": 1,
+        "titre": titre,
+        "sortie": sortie,
+        "memoire": modele["memoire"],
+        "entretiens": entretiens,
+    }
+    out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    inclus = sum(1 for e in entretiens if e.get("inclure"))
+    print(f"\n[OK] Manifeste ecrit : {out_path}")
+    print(f"     {inclus} entretien(s) inclus sur {nb}.")
+    print("     Suite : ia synthese verifier   puis   ia synthese lancer")
+
+
 # ---------------------------------------------------------------------------
 def main():
     try:
@@ -151,6 +221,10 @@ def main():
     p_init = sub.add_parser("init", help="Pre-genere un manifeste depuis un perimetre.")
     p_init.add_argument("perimetre", help="Dossier contenant les entretiens (scan recursif).")
     p_init.add_argument("--out", help=f"Fichier de sortie (defaut : <perimetre>/{NOM_MANIFESTE}).")
+
+    p_creer = sub.add_parser("creer", help="Cree INTERACTIVEMENT un manifeste (scan + questions).")
+    p_creer.add_argument("perimetre", nargs="?", default=".", help="Dossier des entretiens (defaut: .).")
+    p_creer.add_argument("--out", help=f"Fichier de sortie (defaut: <perimetre>/{NOM_MANIFESTE}).")
 
     p_val = sub.add_parser("valider", help="Verifie un manifeste (sources + memoire).")
     p_val.add_argument("manifeste", help=f"Chemin du {NOM_MANIFESTE}.")
@@ -171,6 +245,20 @@ def main():
         print(f"     {inclus}/{len(data['entretiens'])} entretien(s) avec transcript anonymise.")
         print(f"     Memoire : {data['memoire']}")
         print("     Edite-le : selectionne (inclure), renseigne role/interviewe, puis 'ia synthese verifier'.")
+        return
+
+    if args.cmd == "creer":
+        perim = Path(args.perimetre).resolve()
+        if not perim.is_dir():
+            print(f"[ERREUR] Perimetre introuvable : {perim}", file=sys.stderr)
+            sys.exit(1)
+        out = Path(args.out).resolve() if args.out else (perim / NOM_MANIFESTE)
+        if out.exists():
+            rep = input(f"{out.name} existe deja. Ecraser ? [o/N] : ").strip().lower()
+            if not rep.startswith("o"):
+                print("Annule.")
+                return
+        creer(perim, out)
         return
 
     if args.cmd == "valider":
